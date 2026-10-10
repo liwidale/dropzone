@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+
+- **Delete immediately.** Remove files without going through the Trash. Choose **Delete Immediately** from the menu, or press `⌥⌘⌫` on macOS and `Shift+Delete` on Windows and Linux.
+- **Skip the Trash everywhere.** Set **Removing files** in Settings to **Delete immediately**, and removing files, cleaning up duplicates and Trash rules delete right away. Dropzone always asks first, since deleted files can't be restored.
+
+### Improved
+
+- **Clearer segmented controls.** The selected option stands out better in dark appearance.
+
 ## 1.1.0
 
 ### Added

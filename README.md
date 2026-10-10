@@ -60,7 +60,8 @@ Each release also lists `SHA256SUMS.txt` so you can check the download.
 
 - **Sort with rules you control.** Ten starting rules sort loose files by kind into folders like Images, Documents and Installers. Edit them, add your own and drag them into the order you want.
 - **Review before anything moves.** Sorting opens a preview grouped by destination. Leave out any file you like. When a name is already taken, the file gets a number, so nothing is ever replaced.
-- **Undo anything.** Every change is recorded in History. Undo puts files back where they were, including files moved to the Trash, and says plainly when something can no longer be restored.
+- **Undo anything you move.** Every change is recorded in History. Undo puts files back where they were, including files moved to the Trash, and says plainly when something can no longer be restored.
+- **Delete right away when you want to.** Choose **Delete Immediately** for any file, or set Dropzone to skip the Trash for everything it removes. Dropzone always asks first, because deleted files can't be restored.
 - **Find exact duplicates.** Dropzone compares file contents, so copies with different names are found too. You choose which copy stays, and one always does.
 - **See what you have.** Files are recognized by their contents as well as their names, including screenshots, unfinished downloads and files without an extension. The site a file came from is shown when your browser or system recorded it.
 - **Code projects stay intact.** Folders with a `.git` folder, `package.json`, `Cargo.toml` or another project file are protected. Sorting and duplicate cleanup never touch them, and moving their files by hand asks first.
@@ -107,7 +108,7 @@ Each release also lists `SHA256SUMS.txt` so you can check the download.
 | Show or hide the inspector | `⌥⌘I` | `Ctrl+Alt+I` |
 | Settings | `⌘,` | `Ctrl+,` |
 
-In the file list: `↑` `↓` move the selection, `Shift` extends it, `Enter` opens the selected files and `Esc` clears the selection. `⌘⌫` on macOS and `Delete` on Windows and Linux move the selected files to the Trash.
+In the file list: `↑` `↓` move the selection, `Shift` extends it, `Enter` opens the selected files and `Esc` clears the selection. `⌘⌫` on macOS and `Delete` on Windows and Linux move the selected files to the Trash. `⌥⌘⌫` on macOS and `Shift+Delete` on Windows and Linux delete them immediately.
 
 ## Rules
 
@@ -122,7 +123,7 @@ A rule has one or more conditions and an action. A file must match every conditi
 | Date added | more than 30 days ago |
 | Size | larger than 500 MB |
 
-The action moves matching files to a folder inside the one you are sorting, for example `Invoices` or `Work/Invoices`, or to any folder you choose. Files can be grouped into subfolders by year or by month. A rule can also move files to the Trash.
+The action moves matching files to a folder inside the one you are sorting, for example `Invoices` or `Work/Invoices`, or to any folder you choose. Files can be grouped into subfolders by year or by month. A rule can also move files to the Trash, or delete them immediately when **Removing files** in **Settings** is set to **Delete immediately**.
 
 Rules run from top to bottom, and the first rule that matches a file decides where it goes. Only files at the top level of a folder are sorted. Files already in subfolders, unfinished downloads and files inside code projects stay where they are.
 
@@ -132,6 +133,7 @@ Rules run from top to bottom, and the first rule that matches a file decides whe
 - It reads only the folders you add. Moves happen with the same rights you have in your file manager.
 - File contents are read only to recognize file types and to compare possible duplicates.
 - You can clear History at any time in **Settings**.
+- **Removing files** in **Settings** decides whether removed files go to the Trash, where you can restore them, or are deleted right away.
 
 ## Where Dropzone keeps its files
 
@@ -155,7 +157,7 @@ It may have been renamed, moved or be on a drive that isn't connected. Click **L
 The folder contains a project file such as `package.json`, so Dropzone treats it as a code project. If it isn't one, turn on **Sort this folder anyway** in **Rules**.
 
 **Undo couldn't put a file back.**
-History shows the reason for each file. A file moved to the Trash or the Recycle Bin can't come back after it was emptied, and a file that was moved or deleted after sorting stays where it is now.
+History shows the reason for each file. A file moved to the Trash or the Recycle Bin can't come back after it was emptied, a file deleted immediately can't come back at all, and a file that was moved or deleted after sorting stays where it is now.
 
 **Dropzone closed while it was sorting.**
 On the next launch it finishes the record of what happened and offers to undo the part that was done. Files it hadn't reached yet were not touched.
