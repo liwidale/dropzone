@@ -258,9 +258,9 @@ mod tests {
         assert_eq!(groups.len(), 2);
         let video = groups.iter().find(|g| g.size == 300_000).unwrap();
         assert_eq!(video.files.len(), 2);
-        assert!(video.keep.ends_with("/video.mov"));
+        assert!(Path::new(&video.keep).ends_with("video.mov"));
         let report = groups.iter().find(|g| g.files.len() == 3).unwrap();
-        assert!(report.keep.ends_with("Documents/report.pdf"));
+        assert!(Path::new(&report.keep).ends_with(Path::new("Documents").join("report.pdf")));
         assert_eq!(report.files.last().unwrap().name, "report (1).pdf");
 
         let again = find(&snap.entries, &cache, &AtomicBool::new(false), |_| {}).unwrap();

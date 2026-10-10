@@ -700,11 +700,8 @@ mod tests {
         assert_eq!(plan.unmatched, 1);
         let photo = plan.ops.iter().find(|o| o.name == "photo.jpg").unwrap();
         assert!(photo.renamed);
-        assert!(photo
-            .destination
-            .as_deref()
-            .unwrap()
-            .ends_with("Images/photo 2.jpg"));
+        assert!(Path::new(photo.destination.as_deref().unwrap())
+            .ends_with(Path::new("Images").join("photo 2.jpg")));
 
         let batch = core.apply(request(&plan), &|_, _| {}).unwrap();
         assert!(batch.ops.iter().all(|o| o.status == OpStatus::Done));

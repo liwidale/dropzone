@@ -272,11 +272,19 @@ pub fn trash(path: &Path) -> io::Result<Option<PathBuf>> {
         .map(|n| n.to_os_string())
         .unwrap_or_default();
     let parent = path.parent().map(same_place).unwrap_or_default();
+    let original = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     trash::delete(path).map_err(|e| io::Error::other(e.to_string()))?;
+    if let Some(found) = recycled(&original) {
+        return Ok(Some(found));
+    }
+    let stem = Path::new(&name).file_stem().map(|s| s.to_os_string());
     let item = trash::os_limited::list()
         .unwrap_or_default()
         .into_iter()
-        .filter(|i| i.name == name && same_place(&i.original_parent) == parent)
+        .filter(|i| {
+            (i.name == name || Some(&i.name) == stem.as_ref())
+                && same_place(&i.original_parent) == parent
+        })
         .max_by_key(|i| i.time_deleted);
     Ok(item.map(|i| trashed_file(PathBuf::from(i.id))))
 }
@@ -290,6 +298,62 @@ fn same_place(p: &Path) -> String {
     } else {
         text
     }
+}
+
+#[cfg(target_os = "linux")]
+fn recycled(_: &Path) -> Option<PathBuf> {
+    None
+}
+
+#[cfg(windows)]
+fn recycled(original: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    let Some(Component::Prefix(drive)) = original.components().next() else {
+        return None;
+    };
+    let bin = PathBuf::from(drive.as_os_str()).join("\\$Recycle.Bin");
+    let want = original.display().to_string().to_lowercase();
+    for user in fs::read_dir(bin).ok()?.flatten() {
+        let Ok(items) = fs::read_dir(user.path()) else {
+            continue;
+        };
+        let mut infos: Vec<(std::time::SystemTime, PathBuf)> = items
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("$I"))
+            .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+            .collect();
+        infos.sort_by(|a, b| b.0.cmp(&a.0));
+        for (_, info) in infos.into_iter().take(64) {
+            if recycled_from(&info).is_some_and(|p| p.to_lowercase() == want) {
+                let name = info.file_name()?.to_string_lossy().replacen("$I", "$R", 1);
+                return Some(info.with_file_name(name));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn recycled_from(info: &Path) -> Option<String> {
+    let b = fs::read(info).ok()?;
+    let version = u64::from_le_bytes(b.get(0..8)?.try_into().ok()?);
+    let units: Vec<u16> = match version {
+        2 => {
+            let len = u32::from_le_bytes(b.get(24..28)?.try_into().ok()?) as usize;
+            b.get(28..28 + len * 2)?
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect()
+        }
+        1 => b
+            .get(24..24 + 520)?
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect(),
+        _ => return None,
+    };
+    let end = units.iter().position(|&u| u == 0).unwrap_or(units.len());
+    Some(String::from_utf16_lossy(&units[..end]))
 }
 
 #[cfg(target_os = "linux")]
