@@ -1,7 +1,7 @@
 {
   "name": "dropzone",
   "productName": "Dropzone",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local-first desktop app for macOS, Windows and Linux that sorts your Downloads and other folders with rules you can preview and undo.",
   "author": "Liwidale",
   "license": "MIT",
