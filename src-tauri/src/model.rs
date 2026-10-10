@@ -77,16 +77,34 @@ impl Failure {
             io::ErrorKind::AlreadyExists => "exists",
             io::ErrorKind::StorageFull => "full",
             io::ErrorKind::ReadOnlyFilesystem => "readonly",
-            _ => match e.raw_os_error() {
-                Some(libc::EPERM) | Some(libc::EACCES) => "permission",
-                Some(libc::EBUSY) => "busy",
-                Some(libc::ENOSPC) => "full",
-                Some(libc::EROFS) => "readonly",
-                Some(libc::EEXIST) => "exists",
-                _ => "io",
-            },
+            _ => e.raw_os_error().map_or("io", os_code),
         };
         Self::new(code, e.to_string())
+    }
+}
+
+#[cfg(unix)]
+fn os_code(raw: i32) -> &'static str {
+    match raw {
+        libc::EPERM | libc::EACCES => "permission",
+        libc::EBUSY | libc::ETXTBSY => "busy",
+        libc::ENOSPC => "full",
+        libc::EROFS => "readonly",
+        libc::EEXIST => "exists",
+        _ => "io",
+    }
+}
+
+#[cfg(windows)]
+fn os_code(raw: i32) -> &'static str {
+    match raw {
+        5 | 1314 => "permission",
+        32 | 33 => "busy",
+        39 | 112 => "full",
+        19 => "readonly",
+        80 | 183 => "exists",
+        2 | 3 => "missing",
+        _ => "io",
     }
 }
 

@@ -1,0 +1,40 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Dropzone",
+        "width": 1120,
+        "height": 740,
+        "minWidth": 880,
+        "minHeight": 560,
+        "center": true,
+        "visible": false,
+        "dragDropEnabled": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 22
+        },
+        "windowEffects": {
+          "effects": [
+            "sidebar"
+          ],
+          "state": "followsWindowActiveState"
+        },
+        "tabbingIdentifier": "dropzone"
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

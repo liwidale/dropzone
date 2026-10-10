@@ -4,6 +4,7 @@ import { bytes, when } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { KINDS } from '../kinds'
+import { isMac, modKey } from '../platform'
 import { useApp, type SortKey } from '../store'
 import type { Entry } from '../types'
 import { FileGlyph } from './FileGlyph'
@@ -122,7 +123,7 @@ export function FileList({ entries, location, rootName }: { entries: Entry[]; lo
     if (ev.button !== 0) return
     body.current?.focus()
     const s = useApp.getState()
-    if (ev.metaKey) {
+    if (modKey(ev)) {
       const has = s.selection.includes(e.path)
       useApp.setState({ selection: has ? s.selection.filter((p) => p !== e.path) : [...s.selection, e.path], anchor: e.path })
       pivot.current = e.path
@@ -167,8 +168,8 @@ export function FileList({ entries, location, rootName }: { entries: Entry[]; lo
     else if (ev.key === 'End') pick(entries.length - 1)
     else if (ev.key === 'PageDown') pick(cur + Math.floor(view.height / ROW))
     else if (ev.key === 'PageUp') pick(cur - Math.floor(view.height / ROW))
-    else if (ev.key === 'Enter' || (ev.metaKey && ev.key === 'ArrowDown') || (ev.metaKey && ev.key === 'o')) void openEntries(chosen())
-    else if (ev.metaKey && ev.key === 'Backspace') void s.trash(chosen())
+    else if (ev.key === 'Enter' || (modKey(ev) && (ev.key === 'ArrowDown' || ev.key === 'o'))) void openEntries(chosen())
+    else if ((modKey(ev) && ev.key === 'Backspace') || (!isMac && ev.key === 'Delete')) void s.trash(chosen())
     else if (ev.key === 'Escape') useApp.setState({ selection: [], anchor: null })
     else return
     ev.preventDefault()

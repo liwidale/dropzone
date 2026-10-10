@@ -1,3 +1,5 @@
+import { localTerms } from './platform'
+
 type Dict = Record<string, string>
 
 const DICTS: Record<string, Dict> = {}
@@ -20,7 +22,7 @@ function pick(forms: string[], n: number): string {
 
 export function tr(key: string, ...args: unknown[]): string {
   const raw = dict?.[key] ?? key
-  const text = raw.includes('|') ? pick(raw.split('|'), typeof args[0] === 'number' ? args[0] : 0) : raw
+  const text = localTerms(raw.includes('|') ? pick(raw.split('|'), typeof args[0] === 'number' ? args[0] : 0) : raw)
   if (!args.length) return text
   return text.replace(/\{(\d)\}/g, (m, d: string) => {
     const v = args[Number(d)]

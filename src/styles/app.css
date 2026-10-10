@@ -1698,3 +1698,18 @@
 .drop-card svg {
   color: var(--blue);
 }
+
+.platform-windows .sidebar-drag,
+.platform-linux .sidebar-drag {
+  height: 14px;
+}
+
+.side-foot {
+  flex: none;
+  padding: 6px 10px 12px;
+}
+
+.platform-windows .btn-primary {
+  background: var(--blue);
+  color: #fff;
+}

@@ -12,11 +12,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish
-    runs-on: macos-latest
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+          - name: Windows
+            os: windows-latest
+            args: --bundles nsis
+          - name: Linux
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+    defaults:
+      run:
+        shell: bash
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: 1
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - uses: actions/setup-node@v5
         with:
@@ -25,7 +49,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin, x86_64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -36,8 +60,16 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
-          node -e 'const fs=require("fs");const f="src-tauri/tauri.conf.json";const c=JSON.parse(fs.readFileSync(f));c.version=process.argv[1];fs.writeFileSync(f,JSON.stringify(c,null,2)+"\n")' "$VERSION"
-          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          node -e '
+            const fs = require("fs")
+            const v = process.argv[1]
+            const conf = "src-tauri/tauri.conf.json"
+            const c = JSON.parse(fs.readFileSync(conf))
+            c.version = v
+            fs.writeFileSync(conf, JSON.stringify(c, null, 2) + "\n")
+            const cargo = "src-tauri/Cargo.toml"
+            fs.writeFileSync(cargo, fs.readFileSync(cargo, "utf8").replace(/^version = ".*"$/m, `version = "${v}"`))
+          ' "$VERSION"
 
       - name: Install dependencies
         run: npm ci
@@ -49,21 +81,53 @@ jobs:
           npm run vite:build
           npm test
 
-      - name: Build universal app
-        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+      - name: Build
+        run: npx tauri build ${{ matrix.args }}
 
       - name: Package
         run: |
-          BUNDLE=src-tauri/target/universal-apple-darwin/release/bundle
           mkdir -p out
-          cp "$BUNDLE"/dmg/*.dmg "out/Dropzone-$VERSION-mac.dmg"
-          ditto -c -k --keepParent "$BUNDLE/macos/Dropzone.app" "out/Dropzone-$VERSION-mac.zip"
-          cd out && shasum -a 256 * > SHA256SUMS.txt
+          case "$RUNNER_OS" in
+            macOS)
+              BUNDLE=src-tauri/target/universal-apple-darwin/release/bundle
+              cp "$BUNDLE"/dmg/*.dmg "out/Dropzone-$VERSION-mac.dmg"
+              ditto -c -k --keepParent "$BUNDLE/macos/Dropzone.app" "out/Dropzone-$VERSION-mac.zip"
+              ;;
+            Windows)
+              cp src-tauri/target/release/bundle/nsis/*-setup.exe "out/Dropzone-Setup-$VERSION.exe"
+              ;;
+            Linux)
+              cp src-tauri/target/release/bundle/deb/*.deb "out/Dropzone-$VERSION-linux-amd64.deb"
+              cp src-tauri/target/release/bundle/appimage/*.AppImage "out/Dropzone-$VERSION-linux-x86_64.AppImage"
+              ;;
+          esac
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropzone-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
 
       - name: Release notes
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
           test -s notes.md || echo "Dropzone $VERSION." > notes.md
+          cd out && sha256sum * > SHA256SUMS.txt
 
       - name: Publish release
         env:

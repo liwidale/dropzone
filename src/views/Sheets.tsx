@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { getVersion } from '@tauri-apps/api/app'
+import { useEffect, useState } from 'react'
 import { api, asFailure } from '../api'
 import { describeBatch, failureText } from '../copy'
 import { FileGlyph } from '../components/FileGlyph'
@@ -175,6 +176,12 @@ export function SettingsSheet() {
   const s = useApp((st) => st.settings)
   const { set, setSettings } = useApp.getState()
   const [confirm, setConfirm] = useState(false)
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    void getVersion()
+      .then(setVersion)
+      .catch(() => undefined)
+  }, [])
   const close = () => set({ sheet: null })
   const clear = async () => {
     try {
@@ -249,6 +256,7 @@ export function SettingsSheet() {
         </div>
       </div>
       <div className="sheet-foot">
+        <span className="foot-note">{version && tr('Dropzone {0}', version)}</span>
         <span className="spacer" />
         <Btn kind="primary" onClick={close}>
           {tr('Done')}

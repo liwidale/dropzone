@@ -3,6 +3,7 @@ import { failureText } from '../copy'
 import { Btn, Empty } from '../components/ui'
 import { tr } from '../i18n'
 import { useApp } from '../store'
+import { isMac } from '../platform'
 import type { Failure, Folder } from '../types'
 
 export function FolderIssue({ folder, failure }: { folder: Folder; failure: Failure }) {
@@ -14,15 +15,21 @@ export function FolderIssue({ folder, failure }: { folder: Folder; failure: Fail
         icon="shield"
         title={tr('Dropzone can’t open {0}', folder.name)}
         actions={
-          <>
-            <Btn kind="primary" onClick={() => void api.openPrivacySettings()}>
-              {tr('Open System Settings')}
-            </Btn>
-            {retry}
-          </>
+          isMac ? (
+            <>
+              <Btn kind="primary" onClick={() => void api.openPrivacySettings()}>
+                {tr('Open System Settings')}
+              </Btn>
+              {retry}
+            </>
+          ) : (
+            retry
+          )
         }
       >
-        {tr('macOS needs your permission first. In System Settings, open Privacy & Security, then Files and Folders, and allow Dropzone to read {0}.', folder.name)}
+        {isMac
+          ? tr('macOS needs your permission first. In System Settings, open Privacy & Security, then Files and Folders, and allow Dropzone to read {0}.', folder.name)
+          : tr('Your account isn’t allowed to read {0}. Check the folder’s permissions, then try again.', folder.name)}
       </Empty>
     )
   }

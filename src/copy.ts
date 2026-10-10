@@ -1,5 +1,6 @@
-import { base } from './format'
+import { base, isAbsolute } from './format'
 import { tr } from './i18n'
+import { isMac } from './platform'
 import { KINDS } from './kinds'
 import type { Batch, Condition, Failure, Rule } from './types'
 
@@ -29,7 +30,9 @@ export function failureText(f: Failure): string {
     case 'missing':
       return tr('It isn’t there anymore.')
     case 'permission':
-      return tr('Dropzone isn’t allowed to change this location. You can allow it in System Settings, under Privacy & Security, Files and Folders.')
+      return isMac
+        ? tr('Dropzone isn’t allowed to change this location. You can allow it in System Settings, under Privacy & Security, Files and Folders.')
+        : tr('Your account isn’t allowed to change this location. Check its permissions and try again.')
     case 'exists':
       return tr('Something with the same name is already there.')
     case 'full':
@@ -47,7 +50,7 @@ export function failureText(f: Failure): string {
     case 'emptied':
       return tr('It’s no longer in the Trash.')
     case 'untracked':
-      return tr('macOS didn’t say where in the Trash it went. Use Put Back in the Trash instead.')
+      return isMac ? tr('macOS didn’t say where in the Trash it went. Use Put Back in the Trash instead.') : tr('The system didn’t say where in the Trash it went. Restore it from the Trash instead.')
     case 'same':
       return tr('It’s already in that folder.')
     case 'notfolder':
@@ -102,7 +105,7 @@ export function conditionText(c: Condition): string {
 
 export function actionText(r: Rule): string {
   if (r.action.type === 'trash') return tr('Move to the Trash')
-  const folder = r.action.folder.startsWith('/') ? base(r.action.folder) : r.action.folder
+  const folder = isAbsolute(r.action.folder) ? base(r.action.folder) : r.action.folder
   if (r.action.group === 'year') return tr('Move to {0}, by year', folder)
   if (r.action.group === 'month') return tr('Move to {0}, by month', folder)
   return tr('Move to {0}', folder)

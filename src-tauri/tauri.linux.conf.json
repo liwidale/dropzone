@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "targets": [
+      "deb",
+      "appimage"
+    ],
+    "linux": {
+      "deb": {
+        "section": "utils"
+      }
+    }
+  }
+}

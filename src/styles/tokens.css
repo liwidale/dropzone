@@ -185,3 +185,40 @@ button {
     transition-duration: 1ms !important;
   }
 }
+
+.platform-windows {
+  --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+}
+
+.platform-linux {
+  --font: system-ui, Cantarell, Ubuntu, 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --font-display: system-ui, Cantarell, Ubuntu, 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'Ubuntu Mono', 'DejaVu Sans Mono', monospace;
+}
+
+html.platform-windows,
+html.platform-linux,
+html.platform-windows[data-theme='light'],
+html.platform-linux[data-theme='light'] {
+  --window: #f3f3f3;
+  --pane: #fbfbfb;
+  --box: #ffffff;
+}
+
+html.platform-windows[data-theme='dark'],
+html.platform-linux[data-theme='dark'] {
+  --window: #0a0a0a;
+  --pane: #000000;
+  --box: rgba(255, 255, 255, 0.045);
+}
+
+.platform-windows body,
+.platform-linux body {
+  background: var(--window);
+}

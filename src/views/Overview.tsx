@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { FileGlyph } from '../components/FileGlyph'
 import { Bar, Btn, Empty, Group, Row, Spinner } from '../components/ui'
 import { joinAnd } from '../copy'
-import { bytes, count, relative, when } from '../format'
+import { bytes, count, parent, relative, when } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { KIND_ORDER, KINDS } from '../kinds'
@@ -68,7 +68,7 @@ function Suggestions() {
   const sum = (list: { size: number }[]) => bytes(list.reduce((n, e) => n + e.size, 0))
 
   const ops = plan?.data?.ops ?? []
-  const dests = [...new Set(ops.map((o) => (o.action === 'trash' ? tr('the Trash') : relative(o.destination!.replace(/\/[^/]+$/, ''), current))))]
+  const dests = [...new Set(ops.map((o) => (o.action === 'trash' ? tr('the Trash') : relative(parent(o.destination!), current))))]
   const loose = snap.entries.filter((e) => !e.dir && e.kind !== 'partial').length
 
   return (

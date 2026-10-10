@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, asFailure } from '../api'
 import { failureText } from '../copy'
 import { Btn, Select, Seg, Sheet, Spinner } from '../components/ui'
-import { base, bytes } from '../format'
+import { base, bytes, home, inside, isAbsolute, relative } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { KINDS, RULE_KINDS } from '../kinds'
@@ -203,7 +203,7 @@ export function RuleEditor({ rule }: { rule: Rule | null }) {
   const pick = async () => {
     try {
       const dir = await api.chooseDestination()
-      if (dir && draft.action.type === 'move') setDraft({ ...draft, action: { ...draft.action, folder: dir.startsWith(`${folder.path}/`) ? dir.slice(folder.path.length + 1) : dir } })
+      if (dir && draft.action.type === 'move') setDraft({ ...draft, action: { ...draft.action, folder: inside(dir, folder.path) ? relative(dir, folder.path) : dir } })
     } catch (e) {
       setError(failureText(asFailure(e)))
     }
@@ -290,8 +290,8 @@ export function RuleEditor({ rule }: { rule: Rule | null }) {
                   />
                 </div>
                 <p className="hint">
-                  {draft.action.folder.startsWith('/')
-                    ? tr('Files move to {0}.', draft.action.folder.replace(/^\/Users\/[^/]+/, '~'))
+                  {isAbsolute(draft.action.folder)
+                    ? tr('Files move to {0}.', home(draft.action.folder))
                     : tr('A name creates a folder inside {0}. Use / for nested folders, like Work/Invoices.', folder.name)}
                 </p>
               </>

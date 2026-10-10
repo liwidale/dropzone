@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { moveMenu, openEntries, revealEntries } from '../actions'
 import { fileUrl } from '../api'
-import { base, bytes, count, longDate, relative } from '../format'
+import { base, bytes, count, longDate, parent, relative } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { canPreview, KINDS } from '../kinds'
@@ -64,7 +64,7 @@ function Single({ e }: { e: Entry }) {
         : op
           ? op.action === 'trash'
             ? tr('Sorting moves it to the Trash, following “{0}”.', op.ruleName)
-            : tr('Sorting moves it to {0}, following “{1}”.', relative(op.destination!.replace(/\/[^/]+$/, ''), current), op.ruleName)
+            : tr('Sorting moves it to {0}, following “{1}”.', relative(parent(op.destination!), current), op.ruleName)
           : e.dir
             ? tr('Already in a subfolder, so rules leave it where it is.')
             : tr('No rule matches it, so it stays here.')

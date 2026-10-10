@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { Btn } from '../components/ui'
 import { tr } from '../i18n'
 import { Icon, type IconName } from '../icons'
+import { isMac } from '../platform'
 import { useApp } from '../store'
 
 const POINTS: { icon: IconName; title: string; text: string }[] = [
@@ -44,7 +45,7 @@ export function Welcome() {
             {tr('Choose a folder…')}
           </Btn>
         </div>
-        <p className="welcome-foot">{tr('macOS may ask for permission to let Dropzone read the folder. Nothing changes until you review it.')}</p>
+        <p className="welcome-foot">{isMac ? tr('macOS may ask for permission to let Dropzone read the folder. Nothing changes until you review it.') : tr('Nothing changes until you review it.')}</p>
       </motion.div>
     </div>
   )

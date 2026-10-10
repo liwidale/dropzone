@@ -64,17 +64,62 @@ fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
-    if exists(to) {
-        return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let a = CString::new(from.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    let b = CString::new(to.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    let rc = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            a.as_ptr(),
+            libc::AT_FDCWD,
+            b.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if rc == 0 {
+        return Ok(());
     }
-    fs::rename(from, to)
+    let e = io::Error::last_os_error();
+    match e.raw_os_error() {
+        Some(libc::EINVAL) | Some(libc::ENOSYS) => {
+            fs::hard_link(from, to)?;
+            fs::remove_file(from)
+        }
+        _ => Err(e),
+    }
+}
+
+#[cfg(windows)]
+fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+    let wide = |p: &Path| -> Vec<u16> { p.as_os_str().encode_wide().chain(Some(0)).collect() };
+    let (a, b) = (wide(from), wide(to));
+    if unsafe { MoveFileExW(a.as_ptr(), b.as_ptr(), 0) } != 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(unix)]
+fn cross_device(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(libc::EXDEV)
+}
+
+#[cfg(windows)]
+fn cross_device(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(17)
 }
 
 pub fn move_item(src: &Path, dst: &Path) -> io::Result<()> {
     match rename_exclusive(src, dst) {
-        Err(e) if e.raw_os_error() == Some(libc::EXDEV) => move_across_volumes(src, dst),
+        Err(e) if cross_device(&e) => move_across_volumes(src, dst),
         other => other,
     }
 }
@@ -107,7 +152,7 @@ fn move_across_volumes(src: &Path, dst: &Path) -> io::Result<()> {
 fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
     let md = fs::symlink_metadata(src)?;
     if md.file_type().is_symlink() {
-        std::os::unix::fs::symlink(fs::read_link(src)?, dst)
+        copy_link(src, dst)
     } else if md.is_dir() {
         fs::create_dir(dst)?;
         for item in fs::read_dir(src)? {
@@ -118,6 +163,16 @@ fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
     } else {
         fs::copy(src, dst).map(|_| ())
     }
+}
+
+#[cfg(unix)]
+fn copy_link(src: &Path, dst: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(fs::read_link(src)?, dst)
+}
+
+#[cfg(windows)]
+fn copy_link(_: &Path, _: &Path) -> io::Result<()> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
 }
 
 fn tree_size(p: &Path) -> io::Result<u64> {
@@ -206,9 +261,72 @@ pub fn trash(path: &Path) -> io::Result<Option<PathBuf>> {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
-pub fn trash(_: &Path) -> io::Result<Option<PathBuf>> {
-    Err(io::Error::from(io::ErrorKind::Unsupported))
+#[cfg(target_os = "macos")]
+pub fn forget_trashed(_: &Path) {}
+
+#[cfg(any(windows, target_os = "linux"))]
+pub fn trash(path: &Path) -> io::Result<Option<PathBuf>> {
+    fs::symlink_metadata(path)?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
+    let parent = path.parent().map(same_place).unwrap_or_default();
+    trash::delete(path).map_err(|e| io::Error::other(e.to_string()))?;
+    let item = trash::os_limited::list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|i| i.name == name && same_place(&i.original_parent) == parent)
+        .max_by_key(|i| i.time_deleted);
+    Ok(item.map(|i| trashed_file(PathBuf::from(i.id))))
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+fn same_place(p: &Path) -> String {
+    let real = dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let text = real.display().to_string();
+    if cfg!(windows) {
+        text.to_lowercase()
+    } else {
+        text
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn trashed_file(info: PathBuf) -> PathBuf {
+    let name = info
+        .file_stem()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
+    info.parent()
+        .and_then(Path::parent)
+        .map(|trash| trash.join("files").join(&name))
+        .unwrap_or(info)
+}
+
+#[cfg(windows)]
+fn trashed_file(id: PathBuf) -> PathBuf {
+    id
+}
+
+#[cfg(target_os = "linux")]
+pub fn forget_trashed(file: &Path) {
+    if let (Some(name), Some(trash)) = (file.file_name(), file.parent().and_then(Path::parent)) {
+        let mut info = name.to_os_string();
+        info.push(".trashinfo");
+        let _ = fs::remove_file(trash.join("info").join(info));
+    }
+}
+
+#[cfg(windows)]
+pub fn forget_trashed(file: &Path) {
+    if let Some(rest) = file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.strip_prefix("$R"))
+    {
+        let _ = fs::remove_file(file.with_file_name(format!("$I{rest}")));
+    }
 }
 
 #[cfg(test)]

@@ -49,7 +49,7 @@ pub fn scan(root: &Path, opts: Options, cancel: &AtomicBool) -> Outcome<Snapshot
         };
         for item in items {
             let name = item.file_name().to_string_lossy().into_owned();
-            if skip_name(&name, opts.hidden) {
+            if skip_name(&name, opts.hidden) || (!opts.hidden && hidden_attribute(&item)) {
                 continue;
             }
             let Ok(ft) = item.file_type() else { continue };
@@ -100,7 +100,7 @@ pub fn top_level(root: &Path, hidden: bool) -> Outcome<Vec<Entry>> {
     let mut out = Vec::new();
     for item in read.flatten() {
         let name = item.file_name().to_string_lossy().into_owned();
-        if skip_name(&name, hidden) {
+        if skip_name(&name, hidden) || (!hidden && hidden_attribute(&item)) {
             continue;
         }
         let Ok(ft) = item.file_type() else { continue };
@@ -116,12 +116,32 @@ pub fn top_level(root: &Path, hidden: bool) -> Outcome<Vec<Entry>> {
     Ok(out)
 }
 
+const SYSTEM_NAMES: &[&str] = &[
+    ".DS_Store",
+    "node_modules",
+    "Icon\r",
+    "desktop.ini",
+    "Thumbs.db",
+    "$RECYCLE.BIN",
+    "System Volume Information",
+];
+
 fn skip_name(name: &str, hidden: bool) -> bool {
     name.starts_with(TEMP_PREFIX)
-        || name == ".DS_Store"
-        || name == "node_modules"
-        || name == "Icon\r"
+        || SYSTEM_NAMES.contains(&name)
         || (!hidden && name.starts_with('.'))
+}
+
+#[cfg(windows)]
+fn hidden_attribute(item: &fs::DirEntry) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    item.metadata()
+        .is_ok_and(|m| m.file_attributes() & 0x2 != 0)
+}
+
+#[cfg(not(windows))]
+fn hidden_attribute(_: &fs::DirEntry) -> bool {
+    false
 }
 
 pub fn describe(path: &Path, name: &str, rel: &str, ext: &str, is_dir: bool) -> Option<Entry> {

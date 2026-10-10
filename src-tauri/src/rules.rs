@@ -128,7 +128,7 @@ pub fn validate(rule: &mut Rule) -> Outcome<()> {
         }
     }
     if let Action::Move { folder, .. } = &mut rule.action {
-        *folder = folder.trim().trim_end_matches('/').to_string();
+        *folder = folder.trim().trim_end_matches(['/', '\\']).to_string();
         if !valid_folder(folder) {
             return Err(Failure::new("invalidrule", "folder"));
         }
@@ -208,7 +208,10 @@ pub fn destination(root: &Path, folder: &str, group: Grouping, added: i64) -> Pa
     let base = if Path::new(folder).is_absolute() {
         PathBuf::from(folder)
     } else {
-        root.join(folder)
+        folder
+            .split(['/', '\\'])
+            .filter(|p| !p.is_empty())
+            .fold(root.to_path_buf(), |acc, part| acc.join(part))
     };
     match group {
         Grouping::None => base,
@@ -221,12 +224,11 @@ pub fn destination(root: &Path, folder: &str, group: Grouping, added: i64) -> Pa
 }
 
 fn local_date(ms: i64) -> (i32, u32) {
-    let secs = (ms / 1000) as libc::time_t;
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    if unsafe { libc::localtime_r(&secs, &mut tm) }.is_null() {
-        return (1970, 1);
-    }
-    (tm.tm_year + 1900, (tm.tm_mon + 1) as u32)
+    use chrono::{Datelike, Local, TimeZone};
+    Local
+        .timestamp_millis_opt(ms)
+        .single()
+        .map_or((1970, 1), |d| (d.year(), d.month()))
 }
 
 #[cfg(test)]
@@ -301,12 +303,13 @@ mod tests {
     fn validation() {
         let mut bad = sort_into("x", "../escape", &[Kind::Image]);
         assert!(validate(&mut bad).is_err());
-        let mut abs = sort_into("x", "/Users/someone/Pictures/", &[Kind::Image]);
+        let pictures = std::env::temp_dir().join("Pictures").display().to_string();
+        let mut abs = sort_into("x", &format!("{pictures}/"), &[Kind::Image]);
         assert!(validate(&mut abs).is_ok());
         assert_eq!(
             abs.action,
             Action::Move {
-                folder: "/Users/someone/Pictures".into(),
+                folder: pictures,
                 group: Grouping::None
             }
         );
@@ -329,16 +332,26 @@ mod tests {
 
     #[test]
     fn grouping() {
-        let root = Path::new("/r");
+        let root = std::env::temp_dir().join("r");
         assert_eq!(
-            destination(root, "Images", Grouping::None, 0),
-            PathBuf::from("/r/Images")
+            destination(&root, "Images", Grouping::None, 0),
+            root.join("Images")
         );
-        let d = destination(root, "Images", Grouping::Month, 1_760_000_000_000);
-        assert!(d.display().to_string().starts_with("/r/Images/2025-"));
         assert_eq!(
-            destination(root, "/abs", Grouping::None, 0),
-            PathBuf::from("/abs")
+            destination(&root, "Work/Invoices", Grouping::None, 0),
+            root.join("Work").join("Invoices")
+        );
+        let d = destination(&root, "Images", Grouping::Month, 1_760_000_000_000);
+        assert_eq!(d.parent(), Some(root.join("Images").as_path()));
+        assert!(d
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("2025-"));
+        let abs = std::env::temp_dir().join("abs");
+        assert_eq!(
+            destination(&root, &abs.display().to_string(), Grouping::None, 0),
+            abs
         );
     }
 }

@@ -12,10 +12,32 @@ concurrency:
 
 jobs:
   check:
-    name: Check and build
-    runs-on: macos-latest
+    name: Check and build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            bundles: app
+          - name: Windows
+            os: windows-latest
+            bundles: nsis
+          - name: Linux
+            os: ubuntu-22.04
+            bundles: deb
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - uses: actions/setup-node@v5
         with:
@@ -54,4 +76,4 @@ jobs:
         run: npm test
 
       - name: Build app
-        run: npx tauri build --bundles app
+        run: npx tauri build --bundles ${{ matrix.bundles }}

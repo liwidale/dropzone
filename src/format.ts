@@ -48,11 +48,28 @@ export function ago(t: number, now = Date.now()): string {
   return tr('{0} year ago|{0} years ago', Math.max(1, years))
 }
 
-export const base = (p: string): string => p.replace(/\/+$/, '').split('/').pop() || p
+const trim = (p: string): string => (p === '/' || /^[a-zA-Z]:[\\/]?$/.test(p) ? p : p.replace(/[\\/]+$/, ''))
+
+const separator = (p: string): string => (/^[a-zA-Z]:|^\\\\/.test(p) ? '\\' : '/')
+
+export const isAbsolute = (p: string): boolean => /^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(p)
+
+export const base = (p: string): string => trim(p).split(/[\\/]/).pop() || p
+
+export function parent(p: string): string {
+  const t = trim(p)
+  const i = Math.max(t.lastIndexOf('/'), t.lastIndexOf('\\'))
+  if (i < 0) return t
+  return i === 0 || (i === 2 && t[1] === ':') ? t.slice(0, i + 1) : t.slice(0, i)
+}
+
+export const join = (dir: string, name: string): string => `${trim(dir)}${/[\\/]$/.test(trim(dir)) ? '' : separator(dir)}${name}`
+
+export const inside = (path: string, dir: string): boolean => path.length > dir.length + 1 && path.startsWith(trim(dir)) && /[\\/]/.test(path[trim(dir).length])
+
+export const home = (p: string): string => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 
 export function relative(path: string, root: string): string {
   if (path === root) return base(root)
-  return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path.replace(/^\/Users\/[^/]+/, '~')
+  return inside(path, root) ? path.slice(trim(root).length + 1) : home(path)
 }
-
-export const parent = (p: string): string => p.slice(0, Math.max(0, p.lastIndexOf('/'))) || '/'

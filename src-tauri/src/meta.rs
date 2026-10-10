@@ -1,23 +1,25 @@
 use std::path::Path;
 
-const WHERE_FROMS: &str = "com.apple.metadata:kMDItemWhereFroms";
-const SCREEN_CAPTURE: &str = "com.apple.metadata:kMDItemIsScreenCapture";
-
 pub struct Extra {
     pub added: Option<i64>,
     pub from: Option<String>,
     pub screen_capture: bool,
 }
 
+#[cfg(target_os = "macos")]
 pub fn read(path: &Path, wants_capture_flag: bool) -> Extra {
+    const WHERE_FROMS: &str = "com.apple.metadata:kMDItemWhereFroms";
+    const SCREEN_CAPTURE: &str = "com.apple.metadata:kMDItemIsScreenCapture";
     let names: Vec<String> = xattr::list(path)
         .map(|l| l.filter_map(|n| n.into_string().ok()).collect())
         .unwrap_or_default();
-    let from = if names.iter().any(|n| n == WHERE_FROMS) {
-        where_from(path)
-    } else {
-        None
-    };
+    let from = names
+        .iter()
+        .any(|n| n == WHERE_FROMS)
+        .then(|| xattr::get(path, WHERE_FROMS).ok().flatten())
+        .flatten()
+        .and_then(|raw| plist::from_bytes::<Vec<String>>(&raw).ok())
+        .and_then(|list| list.iter().find_map(|u| host(u)));
     let screen_capture = wants_capture_flag && names.iter().any(|n| n == SCREEN_CAPTURE);
     Extra {
         added: added_time(path),
@@ -26,10 +28,36 @@ pub fn read(path: &Path, wants_capture_flag: bool) -> Extra {
     }
 }
 
-fn where_from(path: &Path) -> Option<String> {
-    let raw = xattr::get(path, WHERE_FROMS).ok()??;
-    let list: Vec<String> = plist::from_bytes(&raw).ok()?;
-    list.iter().find_map(|u| host(u))
+#[cfg(target_os = "linux")]
+pub fn read(path: &Path, _: bool) -> Extra {
+    let from = xattr::get(path, "user.xdg.origin.url")
+        .ok()
+        .flatten()
+        .and_then(|raw| String::from_utf8(raw).ok())
+        .and_then(|u| host(&u));
+    Extra {
+        added: None,
+        from,
+        screen_capture: false,
+    }
+}
+
+#[cfg(windows)]
+pub fn read(path: &Path, _: bool) -> Extra {
+    let mut stream = path.as_os_str().to_os_string();
+    stream.push(":Zone.Identifier");
+    let from = std::fs::read_to_string(&stream).ok().and_then(|text| {
+        ["HostUrl=", "ReferrerUrl="].iter().find_map(|key| {
+            text.lines()
+                .find_map(|l| l.trim().strip_prefix(key))
+                .and_then(host)
+        })
+    });
+    Extra {
+        added: None,
+        from,
+        screen_capture: false,
+    }
 }
 
 pub fn host(url: &str) -> Option<String> {
@@ -119,11 +147,6 @@ fn added_time(path: &Path) -> Option<i64> {
     Some(ts.tv_sec * 1000 + ts.tv_nsec / 1_000_000)
 }
 
-#[cfg(not(target_os = "macos"))]
-fn added_time(_: &Path) -> Option<i64> {
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,9 +166,10 @@ mod tests {
         assert_eq!(host("http://[::1]:8080/f").as_deref(), Some("::1"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn added_time_reads() {
         let dir = std::env::temp_dir();
-        assert!(added_time(&dir).is_some() || cfg!(not(target_os = "macos")));
+        assert!(added_time(&dir).is_some());
     }
 }

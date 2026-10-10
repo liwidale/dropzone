@@ -11,6 +11,7 @@ import { Btn, Empty, Spinner } from './components/ui'
 import { tr } from './i18n'
 import { Icon } from './icons'
 import { popup } from './menu'
+import { isMac } from './platform'
 import { folderOf, useApp, type View } from './store'
 import type { Entry } from './types'
 import { Duplicates } from './views/Duplicates'
@@ -39,6 +40,34 @@ function visibleEntries(): Entry[] {
   const s = useApp.getState()
   const snap = s.current ? s.snapshots[s.current]?.data : undefined
   return snap ? filterEntries(snap.entries, { kind: s.kind, preset: s.preset, query: s.query, scope: s.scope, sort: s.sort, staleDays: s.settings.staleDays }) : []
+}
+
+const SHORTCUTS: Record<string, string> = {
+  o: 'add-folder',
+  r: 'refresh',
+  f: 'find',
+  z: 'undo',
+  a: 'select-all',
+  ',': 'settings',
+  '1': 'view-overview',
+  '2': 'view-files',
+  '3': 'view-duplicates',
+  '4': 'view-rules',
+  '5': 'view-history',
+}
+
+function shortcut(e: KeyboardEvent): void {
+  if (e.key === 'F5') {
+    e.preventDefault()
+    onMenu('refresh')
+    return
+  }
+  if (!e.ctrlKey || e.metaKey) return
+  const key = e.key.toLowerCase()
+  const id = e.shiftKey && key === 's' ? 'sort' : e.altKey && key === 'i' ? 'inspector' : !e.shiftKey && !e.altKey ? SHORTCUTS[key] : undefined
+  if (!id || ((id === 'undo' || id === 'select-all') && editing())) return
+  e.preventDefault()
+  onMenu(id)
 }
 
 const editing = (): boolean => {
@@ -197,6 +226,7 @@ export function App() {
 
   useEffect(() => {
     void useApp.getState().boot()
+    if (!isMac) window.addEventListener('keydown', shortcut)
     const timers = new Map<string, ReturnType<typeof setTimeout>>()
     const subs = [
       on.menu(onMenu),
@@ -238,6 +268,7 @@ export function App() {
       }),
     ]
     return () => {
+      window.removeEventListener('keydown', shortcut)
       for (const p of subs) void p.then((u) => u())
     }
   }, [])

@@ -2,6 +2,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { create } from 'zustand'
 import { api, asFailure } from './api'
 import { describeBatch, failureText } from './copy'
+import { join, parent } from './format'
 import { tr } from './i18n'
 import type { ApplyRequest, Batch, DupGroup, Entry, Failure, Folder, Kind, KnownFolder, Plan, Rule, Settings, Snapshot } from './types'
 
@@ -381,9 +382,7 @@ export const useApp = create<State>((set, get) => ({
       }
     }
     if (!target) return
-    const ops = entries
-      .filter((e) => !e.path.startsWith(`${target}/`) || e.path.slice(target.length + 1).includes('/'))
-      .map((e) => ({ action: 'move' as const, source: e.path, destination: `${target}/${e.name}`, size: e.size, modified: e.modified }))
+    const ops = entries.filter((e) => parent(e.path) !== target).map((e) => ({ action: 'move' as const, source: e.path, destination: join(target, e.name), size: e.size, modified: e.modified }))
     if (!ops.length) {
       get().flash(tr('Those files are already there.'))
       return

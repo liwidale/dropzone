@@ -5,6 +5,7 @@ import { tr } from '../i18n'
 import { Icon, type IconName } from '../icons'
 import { KIND_ORDER, KINDS } from '../kinds'
 import { popup } from '../menu'
+import { isMac } from '../platform'
 import { folderOf, useApp, type View } from '../store'
 import type { Folder, Kind } from '../types'
 import { Spinner } from './ui'
@@ -138,6 +139,11 @@ export function Sidebar() {
           </div>
         )}
       </nav>
+      {!isMac && (
+        <div className="side-foot">
+          <Item icon="gear" label={tr('Settings')} muted onClick={() => set({ sheet: { type: 'settings' } })} />
+        </div>
+      )}
     </aside>
   )
 }

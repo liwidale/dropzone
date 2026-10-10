@@ -97,7 +97,7 @@ function appIcon(size, pad) {
   })
 }
 
-const sizes = [16, 32, 64, 128, 256, 512, 1024]
+const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
 const pngs = Object.fromEntries(sizes.map((s) => [s, png(s, appIcon(s, s <= 32 ? 0.02 : 0.09))]))
 
 writeFileSync(path.join(root, 'branding', 'icon.png'), pngs[1024])
@@ -105,6 +105,26 @@ writeFileSync(icons('icon.png'), pngs[1024])
 writeFileSync(icons('32x32.png'), pngs[32])
 writeFileSync(icons('128x128.png'), pngs[128])
 writeFileSync(icons('128x128@2x.png'), pngs[256])
+
+{
+  const list = [16, 24, 32, 48, 64, 128, 256]
+  const head = Buffer.alloc(6 + 16 * list.length)
+  head.writeUInt16LE(0, 0)
+  head.writeUInt16LE(1, 2)
+  head.writeUInt16LE(list.length, 4)
+  let offset = head.length
+  list.forEach((s, i) => {
+    const e = 6 + i * 16
+    head[e] = s >= 256 ? 0 : s
+    head[e + 1] = s >= 256 ? 0 : s
+    head.writeUInt16LE(1, e + 4)
+    head.writeUInt16LE(32, e + 6)
+    head.writeUInt32LE(pngs[s].length, e + 8)
+    head.writeUInt32LE(offset, e + 12)
+    offset += pngs[s].length
+  })
+  writeFileSync(icons('icon.ico'), Buffer.concat([head, ...list.map((s) => pngs[s])]))
+}
 
 {
   const entries = [

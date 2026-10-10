@@ -77,7 +77,7 @@ fn known_dirs(app: &AppHandle) -> Vec<(&'static str, PathBuf)> {
     .into_iter()
     .filter_map(|(k, d)| {
         d.ok()
-            .and_then(|d| d.canonicalize().ok().or(Some(d)))
+            .and_then(|d| dunce::canonicalize(&d).ok().or(Some(d)))
             .map(|d| (k, d))
     })
     .collect()
@@ -187,7 +187,7 @@ async fn locate_folder(
     let Some(new_path) = picked.and_then(|p| p.into_path().ok()) else {
         return Ok(None);
     };
-    let real = new_path.canonicalize().map_err(|e| Failure::io(&e))?;
+    let real = dunce::canonicalize(&new_path).map_err(|e| Failure::io(&e))?;
     let key = real.display().to_string();
     let f = {
         let mut c = lock(&state.core.config);
@@ -534,13 +534,18 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             let core = Arc::new(Core::open(dir));
             let watch = watch::Watch::start(handle.clone(), core.clone());
-            let (menu, items) = menu::build(&handle)?;
-            app.set_menu(menu)?;
+            let items = if cfg!(target_os = "macos") {
+                let (menu, items) = menu::build(&handle)?;
+                app.set_menu(menu)?;
+                Some(items)
+            } else {
+                None
+            };
             app.manage(App {
                 core,
                 watch,
                 jobs: Mutex::new(HashMap::new()),
-                menu: Mutex::new(Some(items)),
+                menu: Mutex::new(items),
             });
             sync_roots(&handle, &app.state::<App>());
             let fallback = handle.clone();

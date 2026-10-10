@@ -1,5 +1,6 @@
 import { api, asFailure } from './api'
 import { failureText } from './copy'
+import { isAbsolute, join } from './format'
 import { tr } from './i18n'
 import { popup, type MenuSpec } from './menu'
 import { folderOf, useApp } from './store'
@@ -14,7 +15,7 @@ export function subfolders(): string[] {
   if (!folder || !snap) return []
   const names = new Set<string>()
   for (const e of snap.entries) if (e.dir) names.add(e.dir.split('/')[0])
-  for (const r of folder.rules) if (r.action.type === 'move' && !r.action.folder.startsWith('/')) names.add(r.action.folder.split('/')[0])
+  for (const r of folder.rules) if (r.action.type === 'move' && !isAbsolute(r.action.folder)) names.add(r.action.folder.split(/[\\/]/)[0])
   return [...names].sort((a, b) => a.localeCompare(b)).slice(0, 16)
 }
 
@@ -46,7 +47,7 @@ export function moveMenu(entries: Entry[]): MenuSpec {
     text: tr('Move to'),
     enabled: entries.length > 0,
     items: [
-      ...subs.map((name) => ({ text: name, action: () => void st().moveTo(entries, `${folder}/${name}`) })),
+      ...subs.map((name) => ({ text: name, action: () => void st().moveTo(entries, join(folder!, name)) })),
       ...(subs.length ? (['separator'] as MenuSpec[]) : []),
       { text: tr('Other folder…'), action: () => void st().moveTo(entries, null) },
     ],

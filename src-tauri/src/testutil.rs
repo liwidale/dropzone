@@ -13,7 +13,7 @@ impl TempDir {
             std::env::temp_dir().join(format!("dropzone-test-{tag}-{}-{n}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
-        Self(path.canonicalize().unwrap())
+        Self(dunce::canonicalize(&path).unwrap())
     }
 
     pub fn path(&self) -> &Path {

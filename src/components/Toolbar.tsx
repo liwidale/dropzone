@@ -1,4 +1,4 @@
-import { bytes } from '../format'
+import { bytes, home } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { KINDS } from '../kinds'
@@ -49,7 +49,7 @@ export function Toolbar() {
       ? tr('{0} item|{0} items', visible.length) + (visible.length ? ` · ${bytes(visible.reduce((n, e) => n + e.size, 0))}` : '')
       : snap
         ? tr('{0} item|{0} items', snap.entries.length) + ` · ${bytes(snap.totalSize)}`
-        : folder.path.replace(/^\/Users\/[^/]+/, '~')
+        : home(folder.path)
 
   const pending = plan?.ops.length ?? 0
 

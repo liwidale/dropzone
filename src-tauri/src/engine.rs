@@ -123,7 +123,7 @@ fn resolve(p: &Path) -> PathBuf {
     let mut tail = Vec::new();
     let mut cur = p.to_path_buf();
     loop {
-        if let Ok(real) = fs::canonicalize(&cur) {
+        if let Ok(real) = dunce::canonicalize(&cur) {
             return tail
                 .into_iter()
                 .rev()
@@ -178,7 +178,7 @@ impl Core {
     }
 
     pub fn add_folder(&self, path: &Path) -> Outcome<FolderConfig> {
-        let real = fs::canonicalize(path).map_err(|e| Failure::io(&e))?;
+        let real = dunce::canonicalize(path).map_err(|e| Failure::io(&e))?;
         if !fs::metadata(&real).map_err(|e| Failure::io(&e))?.is_dir() {
             return Err(Failure::new("notfolder", real.display().to_string()));
         }
@@ -207,7 +207,7 @@ impl Core {
     }
 
     pub fn allow_destination(&self, dir: &Path) -> Outcome<String> {
-        let real = fs::canonicalize(dir).map_err(|e| Failure::io(&e))?;
+        let real = dunce::canonicalize(dir).map_err(|e| Failure::io(&e))?;
         let key = real.display().to_string();
         let mut c = lock(&self.config);
         c.destinations.retain(|d| d != &key);
@@ -589,6 +589,9 @@ fn undo_op(op: &mut OpRecord) -> Outcome<()> {
         .unwrap_or_default();
     let dest = ops::free_path(dir, &name, |_| false);
     ops::move_item(&target, &dest).map_err(|e| Failure::io(&e))?;
+    if op.action == OpAction::Trash {
+        ops::forget_trashed(&target);
+    }
     op.restored_to = (dest != source).then(|| dest.display().to_string());
     Ok(())
 }
@@ -837,6 +840,44 @@ mod tests {
         assert_eq!(plan.project.as_deref(), Some(".git"));
         assert!(plan.ops.is_empty());
         assert_eq!(plan.protected, 1);
+    }
+
+    #[test]
+    fn trash_round_trip() {
+        let data = TempDir::new("data");
+        let home = TempDir::new("home");
+        let name = format!("dropzone-trash-test-{}.txt", rules::new_id(""));
+        let file = home.file(&name, b"trash me");
+        let core = Core::open(data.path().to_path_buf());
+        let folder = core.add_folder(home.path()).unwrap();
+        let md = fs::metadata(&file).unwrap();
+        let req = ApplyRequest {
+            folder: folder.path.clone(),
+            kind: BatchKind::Trash,
+            ops: vec![OpRequest {
+                action: OpAction::Trash,
+                source: file.display().to_string(),
+                destination: None,
+                size: md.len(),
+                modified: time_ms(md.modified()),
+            }],
+            allow_projects: false,
+        };
+        let batch = core.apply(req, &|_, _| {}).unwrap();
+        let op = &batch.ops[0];
+        assert_eq!(op.status, OpStatus::Done, "{:?}", op.failure);
+        assert!(!file.exists());
+        let target = PathBuf::from(op.target.clone().expect("trash location"));
+        assert!(target.exists(), "{}", target.display());
+        let undone = core.undo(&batch.id).unwrap();
+        assert_eq!(
+            undone.ops[0].status,
+            OpStatus::Undone,
+            "{:?}",
+            undone.ops[0].failure
+        );
+        assert_eq!(fs::read(&file).unwrap(), b"trash me");
+        assert!(!target.exists());
     }
 
     #[test]
