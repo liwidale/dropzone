@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- **Windows and Linux.** Dropzone now runs on Windows 10 and 11 and on 64-bit Linux, with a Windows installer, a DEB package and an AppImage.
+- **Uses each system's own bin.** Files go to the Recycle Bin on Windows and the Trash on Linux, and Undo brings them back from there.
+- **Download sources everywhere.** The site a file came from is read from Windows and Linux file metadata too.
+- **Familiar shortcuts.** On Windows and Linux, the usual `Ctrl` shortcuts work, `Delete` moves files to the Recycle Bin and Settings sit at the bottom of the sidebar.
+
+### Improved
+
+- **Hidden and system files.** Files Windows marks as hidden, such as `desktop.ini` and `Thumbs.db`, stay out of the way.
+- **Version in Settings.** Settings now show which version of Dropzone you have.
+
 ## 1.0.0
 
 ### Added

@@ -311,7 +311,10 @@ fn recycled(original: &Path) -> Option<PathBuf> {
     let Some(Component::Prefix(drive)) = original.components().next() else {
         return None;
     };
-    let bin = PathBuf::from(drive.as_os_str()).join("\\$Recycle.Bin");
+    let bin = PathBuf::from(format!(
+        "{}\\$Recycle.Bin",
+        drive.as_os_str().to_string_lossy()
+    ));
     let want = original.display().to_string().to_lowercase();
     for user in fs::read_dir(bin).ok()?.flatten() {
         let Ok(items) = fs::read_dir(user.path()) else {
@@ -322,7 +325,7 @@ fn recycled(original: &Path) -> Option<PathBuf> {
             .filter(|e| e.file_name().to_string_lossy().starts_with("$I"))
             .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
             .collect();
-        infos.sort_by(|a, b| b.0.cmp(&a.0));
+        infos.sort_by_key(|i| std::cmp::Reverse(i.0));
         for (_, info) in infos.into_iter().take(64) {
             if recycled_from(&info).is_some_and(|p| p.to_lowercase() == want) {
                 let name = info.file_name()?.to_string_lossy().replacen("$I", "$R", 1);
@@ -337,21 +340,20 @@ fn recycled(original: &Path) -> Option<PathBuf> {
 fn recycled_from(info: &Path) -> Option<String> {
     let b = fs::read(info).ok()?;
     let version = u64::from_le_bytes(b.get(0..8)?.try_into().ok()?);
-    let units: Vec<u16> = match version {
+    let raw = match version {
         2 => {
             let len = u32::from_le_bytes(b.get(24..28)?.try_into().ok()?) as usize;
             b.get(28..28 + len * 2)?
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect()
         }
-        1 => b
-            .get(24..24 + 520)?
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect(),
+        1 => b.get(24..24 + 520)?,
         _ => return None,
     };
+    let units: Vec<u16> = raw
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .collect();
     let end = units.iter().position(|&u| u == 0).unwrap_or(units.len());
     Some(String::from_utf16_lossy(&units[..end]))
 }
