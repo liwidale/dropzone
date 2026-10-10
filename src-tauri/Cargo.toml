@@ -1,0 +1,39 @@
+[package]
+name = "dropzone"
+version = "1.0.0"
+description = "Local-first macOS app that sorts your Downloads and other folders with rules you can preview and undo."
+authors = ["Liwidale"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "dropzone_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+notify = "8"
+xattr = "1"
+plist = "1"
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSFileManager", "NSURL", "NSString", "NSError"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

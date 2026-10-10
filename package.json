@@ -1,0 +1,51 @@
+{
+  "name": "dropzone",
+  "productName": "Dropzone",
+  "version": "1.0.0",
+  "description": "Local-first macOS app that sorts your Downloads and other folders with rules you can preview and undo.",
+  "author": "Liwidale",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "vite": "vite",
+    "vite:build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "icons": "node scripts/icons.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@tauri-apps/cli": "^2.12.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "motion": "^13.5.0",
+    "prettier": "^3.9.10",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^7.0.0",
+    "zustand": "^5.0.15"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liwidale/dropzone.git"
+  },
+  "homepage": "https://github.com/liwidale/dropzone/releases/latest"
+}

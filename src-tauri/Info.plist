@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Dropzone reads your Downloads folder to show, sort and clean up the files in it. Nothing leaves this Mac.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Dropzone reads your Desktop to show, sort and clean up the files on it. Nothing leaves this Mac.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Dropzone reads your Documents folder to show, sort and clean up the files in it. Nothing leaves this Mac.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Dropzone reads folders you add from external drives to show, sort and clean up the files in them.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Dropzone reads folders you add from network drives to show, sort and clean up the files in them.</string>
+</dict>
+</plist>
