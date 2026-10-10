@@ -1,7 +1,7 @@
 [package]
 name = "dropzone"
 version = "1.0.0"
-description = "Local-first macOS app that sorts your Downloads and other folders with rules you can preview and undo."
+description = "Local-first desktop app for macOS, Windows and Linux that sorts your Downloads and other folders with rules you can preview and undo."
 authors = ["Liwidale"]
 license = "MIT"
 edition = "2021"
