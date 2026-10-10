@@ -6,7 +6,7 @@ import { Bar, Btn, Check, Empty, Sheet, Spinner } from '../components/ui'
 import { base, bytes, parent, relative } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
-import { folderOf, useApp } from '../store'
+import { folderOf, removalAction, useApp } from '../store'
 import type { Plan, PlannedOp } from '../types'
 
 interface Bucket {
@@ -20,7 +20,8 @@ function buckets(plan: Plan): Bucket[] {
   const m = new Map<string, Bucket>()
   for (const o of plan.ops) {
     const key = o.action === 'trash' ? '\u0000trash' : parent(o.destination!)
-    if (!m.has(key)) m.set(key, { key, label: o.action === 'trash' ? tr('Trash') : relative(key, plan.folder), trash: o.action === 'trash', ops: [] })
+    if (!m.has(key))
+      m.set(key, { key, label: o.action === 'trash' ? (removalAction() === 'delete' ? tr('Deleted immediately') : tr('Trash')) : relative(key, plan.folder), trash: o.action === 'trash', ops: [] })
     m.get(key)!.ops.push(o)
   }
   return [...m.values()].sort((a, b) => Number(a.trash) - Number(b.trash) || b.ops.length - a.ops.length)
@@ -113,7 +114,11 @@ export function SortSheet() {
 
   const apply = async () => {
     if (!plan || !chosen.length) return
-    const batch = await run({ folder: plan.folder, kind: 'sort', ops: chosen.map((o) => ({ action: o.action, source: o.source, destination: o.destination, size: o.size, modified: o.modified })) })
+    const batch = await run({
+      folder: plan.folder,
+      kind: 'sort',
+      ops: chosen.map((o) => ({ action: o.action === 'trash' ? removalAction() : o.action, source: o.source, destination: o.destination, size: o.size, modified: o.modified })),
+    })
     if (batch && useApp.getState().sheet?.type === 'sort') set({ sheet: null })
   }
 
@@ -169,7 +174,15 @@ export function SortSheet() {
           </div>
         ) : (
           <span className="foot-note">
-            {chosen.length ? (toTrash ? tr('{0} of them go to the Trash.', toTrash) : tr('{0} selected', chosen.length)) : plan?.ops.length ? tr('Nothing selected') : ''}
+            {chosen.length
+              ? toTrash
+                ? removalAction() === 'delete'
+                  ? tr('{0} of them are deleted immediately.', toTrash)
+                  : tr('{0} of them go to the Trash.', toTrash)
+                : tr('{0} selected', chosen.length)
+              : plan?.ops.length
+                ? tr('Nothing selected')
+                : ''}
           </span>
         )}
         <span className="spacer" />

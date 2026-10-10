@@ -35,6 +35,7 @@ export type Sheet =
   | { type: 'remove'; path: string }
   | { type: 'result'; batch: Batch }
   | { type: 'project'; entries: Entry[]; dir: string | null }
+  | { type: 'delete'; entries: Entry[] }
 
 export interface Toast {
   id: number
@@ -86,6 +87,7 @@ interface State {
   setAllowProject(path: string, on: boolean): Promise<void>
   setSettings(p: Partial<Settings>): Promise<void>
   trash(entries: Entry[], confirmed?: boolean): Promise<void>
+  deleteNow(entries: Entry[], confirmed?: boolean): Promise<void>
   moveTo(entries: Entry[], dir: string | null, confirmed?: boolean): Promise<void>
   flash(text: string, tone?: Toast['tone'], undo?: string): void
 }
@@ -109,7 +111,7 @@ export function applyTheme(theme: Settings['theme']): void {
 
 media.addEventListener('change', () => applyTheme(useApp.getState().settings.theme))
 
-const DEFAULT_SETTINGS: Settings = { theme: 'system', showHidden: false, recursive: true, staleDays: 30 }
+const DEFAULT_SETTINGS: Settings = { theme: 'system', showHidden: false, recursive: true, staleDays: 30, removal: 'trash' }
 
 export const useApp = create<State>((set, get) => ({
   ready: false,
@@ -287,7 +289,7 @@ export const useApp = create<State>((set, get) => ({
       const d = describeBatch(batch)
       const failed = batch.ops.some((o) => o.status === 'failed' || o.status === 'skipped')
       if (failed) set({ sheet: { type: 'result', batch } })
-      else get().flash(d.done, 'neutral', batch.ops.some((o) => o.status === 'done') ? batch.id : undefined)
+      else get().flash(d.done, 'neutral', undoable(batch) ? batch.id : undefined)
       void get().load(request.folder, true)
       return batch
     } catch (e) {
@@ -299,7 +301,7 @@ export const useApp = create<State>((set, get) => ({
   },
 
   undo: async (id) => {
-    const target = id ? get().history.find((b) => b.id === id) : get().history.find((b) => b.ops.some((o) => o.status === 'done'))
+    const target = id ? get().history.find((b) => b.id === id) : get().history.find(undoable)
     if (!target) {
       get().flash(tr('Nothing to undo.'))
       return
@@ -362,11 +364,22 @@ export const useApp = create<State>((set, get) => ({
   trash: async (entries, confirmed = false) => {
     const folder = get().current
     if (!folder || !entries.length) return
+    if (get().settings.removal === 'delete') return get().deleteNow(entries)
     if (!confirmed && entries.some((e) => e.project != null)) {
       set({ sheet: { type: 'project', entries, dir: null } })
       return
     }
     await get().run({ folder, kind: 'trash', allowProjects: confirmed, ops: entries.map((e) => ({ action: 'trash', source: e.path, destination: null, size: e.size, modified: e.modified })) })
+  },
+
+  deleteNow: async (entries, confirmed = false) => {
+    const folder = get().current
+    if (!folder || !entries.length) return
+    if (!confirmed) {
+      set({ sheet: { type: 'delete', entries } })
+      return
+    }
+    await get().run({ folder, kind: 'delete', allowProjects: true, ops: entries.map((e) => ({ action: 'delete', source: e.path, destination: null, size: e.size, modified: e.modified })) })
   },
 
   moveTo: async (entries, dir, confirmed = false) => {
@@ -406,5 +419,9 @@ export const useApp = create<State>((set, get) => ({
     )
   },
 }))
+
+export const undoable = (b: Batch): boolean => b.ops.some((o) => o.action !== 'delete' && (o.status === 'done' || (o.status === 'undoFailed' && !!o.target)))
+
+export const removalAction = (): 'trash' | 'delete' => useApp.getState().settings.removal
 
 export const folderOf = (s: State): Folder | null => s.folders.find((f) => f.path === s.current) ?? null

@@ -191,7 +191,7 @@ fn tree_size(p: &Path) -> io::Result<u64> {
     Ok(total)
 }
 
-fn remove_tree(p: &Path) -> io::Result<()> {
+pub fn remove_tree(p: &Path) -> io::Result<()> {
     if fs::symlink_metadata(p)?.is_dir() {
         fs::remove_dir_all(p)
     } else {

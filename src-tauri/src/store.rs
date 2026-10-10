@@ -16,6 +16,7 @@ pub struct Settings {
     pub show_hidden: bool,
     pub recursive: bool,
     pub stale_days: u32,
+    pub removal: String,
 }
 
 impl Default for Settings {
@@ -25,6 +26,7 @@ impl Default for Settings {
             show_hidden: false,
             recursive: true,
             stale_days: 30,
+            removal: "trash".into(),
         }
     }
 }
@@ -58,6 +60,7 @@ pub enum BatchKind {
     Duplicates,
     Move,
     Trash,
+    Delete,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -65,6 +68,7 @@ pub enum BatchKind {
 pub enum OpAction {
     Move,
     Trash,
+    Delete,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]

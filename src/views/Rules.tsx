@@ -33,6 +33,7 @@ function RuleRow({
   onDelete: () => void
   onDrop: () => void
 }) {
+  const removal = useApp((s) => s.settings.removal)
   const controls = useDragControls()
   const menu = () =>
     void popup([
@@ -63,7 +64,7 @@ function RuleRow({
         <span className="row-desc">
           {ruleSummary(rule)}
           <span className="rule-arrow"> → </span>
-          {actionText(rule)}
+          {actionText(rule, removal)}
         </span>
       </button>
       {rule.enabled && hits > 0 && (

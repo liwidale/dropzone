@@ -21,7 +21,7 @@ import { History } from './views/History'
 import { Overview } from './views/Overview'
 import { RuleEditor } from './views/RuleEditor'
 import { Rules } from './views/Rules'
-import { DupesSheet, ProjectSheet, RecoveredSheet, RemoveSheet, ResultSheet, SettingsSheet } from './views/Sheets'
+import { DeleteSheet, DupesSheet, ProjectSheet, RecoveredSheet, RemoveSheet, ResultSheet, SettingsSheet } from './views/Sheets'
 import { SortSheet } from './views/SortSheet'
 import { filterEntries } from './visible'
 import { Welcome } from './views/Welcome'
@@ -120,6 +120,7 @@ function onMenu(id: string): void {
   if (id === 'open') void openEntries(chosen)
   if (id === 'reveal') void revealEntries(chosen)
   if (id === 'trash') void s.trash(chosen)
+  if (id === 'delete') void s.deleteNow(chosen)
   if (id === 'move') {
     const m = moveMenu(chosen)
     if (typeof m !== 'string' && m.items) void popup(m.items)
@@ -175,6 +176,7 @@ function Sheets() {
           {sheet.type === 'remove' && <RemoveSheet path={sheet.path} />}
           {sheet.type === 'result' && <ResultSheet batch={sheet.batch} />}
           {sheet.type === 'project' && <ProjectSheet entries={sheet.entries} dir={sheet.dir} />}
+          {sheet.type === 'delete' && <DeleteSheet entries={sheet.entries} />}
         </motion.div>
       )}
     </AnimatePresence>

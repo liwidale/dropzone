@@ -145,6 +145,7 @@ function ConditionEditor({ c, onChange, onRemove }: { c: Condition; onChange: (c
 
 export function RuleEditor({ rule }: { rule: Rule | null }) {
   const folder = useApp(folderOf)!
+  const removal = useApp((s) => s.settings.removal)
   const { set, saveRules } = useApp.getState()
   const [draft, setDraft] = useState<Rule>(() => rule ?? { id: '', name: '', enabled: true, conditions: [{ type: 'kind', kinds: [] }], action: { type: 'move', folder: '', group: 'none' } })
   const [preview, setPreview] = useState<RulePreview | null>(null)
@@ -296,7 +297,11 @@ export function RuleEditor({ rule }: { rule: Rule | null }) {
                 </p>
               </>
             ) : (
-              <p className="hint">{tr('Files go to the Trash, where you can still put them back. Automatic sorting never uses rules like this.')}</p>
+              <p className="hint">
+                {removal === 'delete'
+                  ? tr('Your settings delete files immediately instead of using the Trash, so they can’t be restored. Sorting always asks first, and automatic sorting never uses rules like this.')
+                  : tr('Files go to the Trash, where you can still put them back. Automatic sorting never uses rules like this.')}
+              </p>
             )}
           </div>
 

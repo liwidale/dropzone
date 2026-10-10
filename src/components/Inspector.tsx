@@ -24,6 +24,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 function Actions({ entries }: { entries: Entry[] }) {
   const trash = useApp((s) => s.trash)
   const busy = useApp((s) => !!s.applying)
+  const removal = useApp((s) => s.settings.removal)
   const menu = moveMenu(entries)
   return (
     <div className="insp-actions">
@@ -42,7 +43,7 @@ function Actions({ entries }: { entries: Entry[] }) {
           {tr('Move to…')}
         </Btn>
         <Btn icon="trash" disabled={busy} onClick={() => void trash(entries)}>
-          {tr('Trash')}
+          {removal === 'delete' ? tr('Delete…') : tr('Trash')}
         </Btn>
       </div>
     </div>

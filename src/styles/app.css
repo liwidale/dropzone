@@ -326,7 +326,7 @@
     0 0 0 0.5px var(--hairline-strong);
 }
 [data-theme='dark'] .seg-bg {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.26);
 }
 
 .select-wrap {

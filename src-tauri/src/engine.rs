@@ -85,7 +85,7 @@ impl Guard {
         let allowed = match self.kind {
             BatchKind::Sort | BatchKind::Auto => project == self.root && self.allow_root,
             BatchKind::Duplicates => false,
-            BatchKind::Move | BatchKind::Trash => self.allow_projects,
+            BatchKind::Move | BatchKind::Trash | BatchKind::Delete => self.allow_projects,
         };
         if allowed {
             Ok(())
@@ -432,6 +432,11 @@ impl Core {
                 op.target = landed.map(|p| p.display().to_string());
                 op.status = OpStatus::Done;
             }
+            OpAction::Delete => {
+                journal.step(i, op, &[]);
+                ops::remove_tree(&src).map_err(|e| Failure::io(&e))?;
+                op.status = OpStatus::Done;
+            }
         }
         Ok(())
     }
@@ -457,7 +462,9 @@ impl Core {
             .cloned()
             .ok_or_else(|| Failure::new("unknownbatch", id))?;
         for op in batch.ops.iter_mut().rev() {
-            if !matches!(op.status, OpStatus::Done | OpStatus::UndoFailed) {
+            if op.action == OpAction::Delete
+                || !matches!(op.status, OpStatus::Done | OpStatus::UndoFailed)
+            {
                 continue;
             }
             match undo_op(op) {
@@ -519,9 +526,9 @@ impl Core {
                 .as_deref()
                 .is_some_and(|t| ops::exists(Path::new(t)));
             match (op.action, src_there, target_there) {
-                (OpAction::Move, false, true) | (OpAction::Trash, false, _) => {
-                    op.status = OpStatus::Done
-                }
+                (OpAction::Move, false, true)
+                | (OpAction::Trash, false, _)
+                | (OpAction::Delete, false, _) => op.status = OpStatus::Done,
                 _ => {
                     op.status = OpStatus::Failed;
                     op.failure = Some(Failure::new("interrupted", ""));
@@ -875,6 +882,43 @@ mod tests {
         );
         assert_eq!(fs::read(&file).unwrap(), b"trash me");
         assert!(!target.exists());
+    }
+
+    #[test]
+    fn deletes_immediately_and_cannot_undo() {
+        let data = TempDir::new("data");
+        let home = TempDir::new("home");
+        let file = home.file("old.dmg", b"installer");
+        let package = home.file("Old.app/Contents/Info.plist", b"<plist/>");
+        let core = Core::open(data.path().to_path_buf());
+        let folder = core.add_folder(home.path()).unwrap();
+        let op = |p: &Path| {
+            let md = fs::symlink_metadata(p).unwrap();
+            OpRequest {
+                action: OpAction::Delete,
+                source: p.display().to_string(),
+                destination: None,
+                size: md.len(),
+                modified: time_ms(md.modified()),
+            }
+        };
+        let app = package.parent().unwrap().parent().unwrap();
+        let req = ApplyRequest {
+            folder: folder.path.clone(),
+            kind: BatchKind::Delete,
+            ops: vec![op(&file), op(app)],
+            allow_projects: false,
+        };
+        let batch = core.apply(req, &|_, _| {}).unwrap();
+        assert!(batch
+            .ops
+            .iter()
+            .all(|o| o.status == OpStatus::Done && o.target.is_none()));
+        assert!(!file.exists());
+        assert!(!app.exists());
+        let after = core.undo(&batch.id).unwrap();
+        assert!(after.ops.iter().all(|o| o.status == OpStatus::Done));
+        assert!(!file.exists());
     }
 
     #[test]

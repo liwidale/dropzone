@@ -169,6 +169,7 @@ export function FileList({ entries, location, rootName }: { entries: Entry[]; lo
     else if (ev.key === 'PageDown') pick(cur + Math.floor(view.height / ROW))
     else if (ev.key === 'PageUp') pick(cur - Math.floor(view.height / ROW))
     else if (ev.key === 'Enter' || (modKey(ev) && (ev.key === 'ArrowDown' || ev.key === 'o'))) void openEntries(chosen())
+    else if ((isMac && ev.metaKey && ev.altKey && ev.key === 'Backspace') || (!isMac && ev.shiftKey && ev.key === 'Delete')) void s.deleteNow(chosen())
     else if ((modKey(ev) && ev.key === 'Backspace') || (!isMac && ev.key === 'Delete')) void s.trash(chosen())
     else if (ev.key === 'Escape') useApp.setState({ selection: [], anchor: null })
     else return

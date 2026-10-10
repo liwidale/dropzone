@@ -6,12 +6,10 @@ import { Btn, Empty } from '../components/ui'
 import { base, relative, when } from '../format'
 import { tr } from '../i18n'
 import { Icon, type IconName } from '../icons'
-import { folderOf, useApp } from '../store'
+import { folderOf, undoable, useApp } from '../store'
 import type { Batch, OpRecord } from '../types'
 
-const KIND_ICON: Record<Batch['kind'], IconName> = { sort: 'sort', auto: 'bolt', duplicates: 'copies', move: 'move', trash: 'trash' }
-
-export const undoable = (b: Batch): boolean => b.ops.some((o) => o.status === 'done' || (o.status === 'undoFailed' && !!o.target))
+const KIND_ICON: Record<Batch['kind'], IconName> = { sort: 'sort', auto: 'bolt', duplicates: 'copies', move: 'move', trash: 'trash', delete: 'trash' }
 
 function status(b: Batch): string {
   const total = b.ops.length
@@ -29,7 +27,7 @@ function status(b: Batch): string {
 function Op({ op, root }: { op: OpRecord; root: string }) {
   const icon: IconName = op.status === 'done' ? 'check' : op.status === 'undone' ? 'undo' : 'alert'
   const tone = op.status === 'done' ? 'var(--green)' : op.status === 'undone' ? 'var(--text-3)' : 'var(--amber)'
-  const where = op.action === 'trash' ? tr('Trash') : op.target ? relative(op.target, root) : '—'
+  const where = op.action === 'delete' ? tr('Deleted') : op.action === 'trash' ? tr('Trash') : op.target ? relative(op.target, root) : '—'
   return (
     <li className="op">
       <span className="op-icon" style={{ color: tone }}>
@@ -139,7 +137,11 @@ export function History() {
           ))}
         </div>
         <div className="page-foot">
-          <p>{tr('Undo puts files back where they were, as long as they haven’t been moved or deleted since. Files moved to the Trash come back unless the Trash was emptied.')}</p>
+          <p>
+            {tr(
+              'Undo puts files back where they were, as long as they haven’t been moved or deleted since. Files moved to the Trash come back unless the Trash was emptied. Files deleted immediately can’t be restored.',
+            )}
+          </p>
           {confirm ? (
             <div className="confirm">
               <Btn kind="ghost" onClick={() => setConfirm(false)}>

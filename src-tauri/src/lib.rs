@@ -400,6 +400,9 @@ fn set_settings(app: AppHandle, state: AppState, settings: Settings) -> Outcome<
     if !matches!(settings.theme.as_str(), "system" | "light" | "dark") {
         settings.theme = "system".into();
     }
+    if !matches!(settings.removal.as_str(), "trash" | "delete") {
+        settings.removal = "trash".into();
+    }
     settings.stale_days = settings.stale_days.clamp(1, 3650);
     let mut c = lock(&state.core.config);
     let rescan = c.settings.show_hidden != settings.show_hidden

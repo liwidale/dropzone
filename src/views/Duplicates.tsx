@@ -13,6 +13,7 @@ export function doomed(d: Dupes | undefined): Entry[] {
 
 function GroupCard({ g, kept, root, onToggle }: { g: DupGroup; kept: string[]; root: string; onToggle: (path: string) => void }) {
   const head = g.files.find((f) => kept.includes(f.path)) ?? g.files[0]
+  const removal = useApp((s) => s.settings.removal)
   return (
     <section className="dupe">
       <header className="dupe-head">
@@ -50,7 +51,7 @@ function GroupCard({ g, kept, root, onToggle }: { g: DupGroup; kept: string[]; r
               aria-pressed={keep}
               onClick={() => onToggle(f.path)}
             >
-              {keep ? tr('Keep') : tr('Move to Trash')}
+              {keep ? tr('Keep') : removal === 'delete' ? tr('Delete') : tr('Move to Trash')}
             </button>
           </div>
         )
@@ -63,6 +64,7 @@ export function Duplicates() {
   const current = useApp((s) => s.current)!
   const folder = useApp(folderOf)!
   const d = useApp((s) => s.dupes[current])
+  const removal = useApp((s) => s.settings.removal)
   const applying = useApp((s) => !!s.applying)
   const { set, loadDupes } = useApp.getState()
 
@@ -135,11 +137,15 @@ export function Duplicates() {
       </div>
       <footer className="actionbar">
         <div className="actionbar-text">
-          {gone.length ? tr('{0} file moves to the Trash and frees {1}.|{0} files move to the Trash and free {1}.', gone.length, bytes(freed)) : tr('All copies are kept.')}
+          {gone.length
+            ? removal === 'delete'
+              ? tr('{0} file is deleted and frees {1}.|{0} files are deleted and free {1}.', gone.length, bytes(freed))
+              : tr('{0} file moves to the Trash and frees {1}.|{0} files move to the Trash and free {1}.', gone.length, bytes(freed))
+            : tr('All copies are kept.')}
           <span className="muted"> {tr('{0} set|{0} sets', d.groups.length)}</span>
         </div>
         <Btn kind="primary" icon="trash" disabled={!gone.length || applying} onClick={() => set({ sheet: { type: 'dupes' } })}>
-          {tr('Move to Trash…')}
+          {removal === 'delete' ? tr('Delete…') : tr('Move to Trash…')}
         </Btn>
       </footer>
     </div>

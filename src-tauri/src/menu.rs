@@ -67,6 +67,7 @@ pub fn build(app: &AppHandle<Wry>) -> tauri::Result<(Menu<Wry>, Items)> {
         .item(&item(app, "reveal", "Show in Finder", None)?)
         .item(&item(app, "move", "Move To…", None)?)
         .item(&item(app, "trash", "Move to Trash", None)?)
+        .item(&item(app, "delete", "Delete Immediately…", None)?)
         .separator()
         .item(&PredefinedMenuItem::close_window(app, None)?)
         .build()?;

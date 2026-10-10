@@ -65,11 +65,12 @@ export interface Settings {
   showHidden: boolean
   recursive: boolean
   staleDays: number
+  removal: 'trash' | 'delete'
 }
 
-export type OpAction = 'move' | 'trash'
+export type OpAction = 'move' | 'trash' | 'delete'
 export type OpStatus = 'pending' | 'done' | 'failed' | 'skipped' | 'undone' | 'undoFailed'
-export type BatchKind = 'sort' | 'auto' | 'duplicates' | 'move' | 'trash'
+export type BatchKind = 'sort' | 'auto' | 'duplicates' | 'move' | 'trash' | 'delete'
 
 export interface OpRecord {
   action: OpAction

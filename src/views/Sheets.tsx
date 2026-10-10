@@ -17,16 +17,25 @@ export function DupesSheet() {
   const applying = useApp((s) => s.applying)
   const { set, run } = useApp.getState()
   const files = doomed(d)
+  const removal = useApp((s) => s.settings.removal)
+  const erase = removal === 'delete'
+  const freed = bytes(files.reduce((n, f) => n + f.size, 0))
   const close = () => !applying && set({ sheet: null })
   const apply = async () => {
-    const batch = await run({ folder: current, kind: 'duplicates', ops: files.map((f) => ({ action: 'trash', source: f.path, destination: null, size: f.size, modified: f.modified })) })
+    const batch = await run({ folder: current, kind: 'duplicates', ops: files.map((f) => ({ action: removal, source: f.path, destination: null, size: f.size, modified: f.modified })) })
     if (batch && useApp.getState().sheet?.type === 'dupes') set({ sheet: null })
   }
   return (
-    <Sheet onClose={close} width={560} label={tr('Move duplicates to the Trash')} busy={!!applying}>
+    <Sheet onClose={close} width={560} label={erase ? tr('Delete duplicates') : tr('Move duplicates to the Trash')} busy={!!applying}>
       <div className="sheet-head">
-        <h2 className="sheet-title">{tr('Move {0} duplicate to the Trash?|Move {0} duplicates to the Trash?', files.length)}</h2>
-        <p className="sheet-sub">{tr('This frees {0}. One copy of each file stays, and you can undo this from History.', bytes(files.reduce((n, f) => n + f.size, 0)))}</p>
+        <h2 className="sheet-title">
+          {erase ? tr('Delete {0} duplicate immediately?|Delete {0} duplicates immediately?', files.length) : tr('Move {0} duplicate to the Trash?|Move {0} duplicates to the Trash?', files.length)}
+        </h2>
+        <p className="sheet-sub">
+          {erase
+            ? tr('This frees {0}. One copy of each file stays. The others skip the Trash and can’t be restored.', freed)
+            : tr('This frees {0}. One copy of each file stays, and you can undo this from History.', freed)}
+        </p>
       </div>
       <div className="sheet-body scroll">
         <ul className="plain-list">
@@ -43,7 +52,7 @@ export function DupesSheet() {
       <div className="sheet-foot">
         {applying && (
           <div className="foot-progress">
-            <span>{tr('Moving {0} of {1}…', applying.done, applying.total)}</span>
+            <span>{erase ? tr('Deleting {0} of {1}…', applying.done, applying.total) : tr('Moving {0} of {1}…', applying.done, applying.total)}</span>
             <Bar value={applying.done} total={applying.total} />
           </div>
         )}
@@ -51,8 +60,8 @@ export function DupesSheet() {
         <Btn kind="ghost" onClick={close} disabled={!!applying}>
           {tr('Cancel')}
         </Btn>
-        <Btn kind="primary" onClick={() => void apply()} disabled={!files.length || !!applying}>
-          {tr('Move to Trash')}
+        <Btn kind={erase ? 'danger' : 'primary'} onClick={() => void apply()} disabled={!files.length || !!applying}>
+          {erase ? tr('Delete') : tr('Move to Trash')}
         </Btn>
       </div>
     </Sheet>
@@ -212,6 +221,24 @@ export function SettingsSheet() {
               ]}
             />
           </Row>
+          <Row
+            title={tr('Removing files')}
+            desc={
+              s.removal === 'delete'
+                ? tr('Files are deleted right away and can’t be restored, not even from History. Dropzone always asks first.')
+                : tr('Files go to the Trash, and Undo can bring them back.')
+            }
+          >
+            <Seg
+              label={tr('Removing files')}
+              value={s.removal}
+              onChange={(v) => void setSettings({ removal: v })}
+              options={[
+                { value: 'trash', label: tr('Move to Trash') },
+                { value: 'delete', label: tr('Delete immediately') },
+              ]}
+            />
+          </Row>
           <Row title={tr('Look inside subfolders')} desc={tr('Shows and compares files in subfolders too. Sorting always works on the top level only.')}>
             <Toggle label={tr('Look inside subfolders')} on={s.recursive} onChange={(v) => void setSettings({ recursive: v })} />
           </Row>
@@ -313,6 +340,62 @@ export function ProjectSheet({ entries, dir }: { entries: Entry[]; dir: string |
             {toTrash ? tr('Trash only the other {0}', others.length) : tr('Move only the other {0}', others.length)}
           </Btn>
         )}
+      </div>
+    </Sheet>
+  )
+}
+
+export function DeleteSheet({ entries }: { entries: Entry[] }) {
+  const current = useApp((s) => s.current)!
+  const applying = useApp((s) => s.applying)
+  const { set, deleteNow } = useApp.getState()
+  const projects = entries.filter((e) => e.project != null).length
+  const close = () => !applying && set({ sheet: null })
+  const apply = async () => {
+    await deleteNow(entries, true)
+    if (useApp.getState().sheet?.type === 'delete') set({ sheet: null })
+  }
+  return (
+    <Sheet onClose={close} width={520} label={tr('Delete immediately')} busy={!!applying}>
+      <div className="sheet-head">
+        <h2 className="sheet-title">{entries.length === 1 ? tr('Delete “{0}” immediately?', entries[0].name) : tr('Delete {0} files immediately?', entries.length)}</h2>
+        <p className="sheet-sub">
+          {tr(
+            '{1}. It skips the Trash and can’t be restored, not even from History.|{1}. They skip the Trash and can’t be restored, not even from History.',
+            entries.length,
+            bytes(entries.reduce((n, e) => n + e.size, 0)),
+          )}
+          {projects > 0 && ` ${tr('{0} of them belongs to a code project.|{0} of them belong to code projects.', projects)}`}
+        </p>
+      </div>
+      {entries.length > 1 && (
+        <div className="sheet-body scroll">
+          <ul className="plain-list">
+            {entries.slice(0, 300).map((e) => (
+              <li key={e.path}>
+                <FileGlyph entry={e} size={20} />
+                <span className="ellipsis">{relative(e.path, current)}</span>
+                <span className="muted">{bytes(e.size)}</span>
+              </li>
+            ))}
+            {entries.length > 300 && <li className="muted">{tr('And {0} more.', entries.length - 300)}</li>}
+          </ul>
+        </div>
+      )}
+      <div className="sheet-foot">
+        {applying && (
+          <div className="foot-progress">
+            <span>{tr('Deleting {0} of {1}…', applying.done, applying.total)}</span>
+            <Bar value={applying.done} total={applying.total} />
+          </div>
+        )}
+        <span className="spacer" />
+        <Btn kind="ghost" onClick={close} disabled={!!applying}>
+          {tr('Cancel')}
+        </Btn>
+        <Btn kind="danger" onClick={() => void apply()} disabled={!!applying} autoFocus>
+          {tr('Delete')}
+        </Btn>
       </div>
     </Sheet>
   )

@@ -78,11 +78,14 @@ export function describeBatch(b: Batch): { title: string; done: string } {
     case 'auto':
       return { title: tr('Sorted {0} new file automatically|Sorted {0} new files automatically', n), done: tr('Sorted {0} new file.|Sorted {0} new files.', n) }
     case 'duplicates':
+      if (b.ops.some((o) => o.action === 'delete')) return { title: tr('Deleted {0} duplicate|Deleted {0} duplicates', n), done: tr('Deleted {0} duplicate.|Deleted {0} duplicates.', n) }
       return { title: tr('Moved {0} duplicate to the Trash|Moved {0} duplicates to the Trash', n), done: tr('Moved {0} duplicate to the Trash.|Moved {0} duplicates to the Trash.', n) }
     case 'move':
       return { title: tr('Moved {0} file|Moved {0} files', n), done: tr('Moved {0} file.|Moved {0} files.', n) }
     case 'trash':
       return { title: tr('Moved {0} file to the Trash|Moved {0} files to the Trash', n), done: tr('Moved {0} file to the Trash.|Moved {0} files to the Trash.', n) }
+    case 'delete':
+      return { title: tr('Deleted {0} file|Deleted {0} files', n), done: tr('Deleted {0} file.|Deleted {0} files.', n) }
   }
 }
 
@@ -103,8 +106,8 @@ export function conditionText(c: Condition): string {
   }
 }
 
-export function actionText(r: Rule): string {
-  if (r.action.type === 'trash') return tr('Move to the Trash')
+export function actionText(r: Rule, removal: 'trash' | 'delete' = 'trash'): string {
+  if (r.action.type === 'trash') return removal === 'delete' ? tr('Delete immediately') : tr('Move to the Trash')
   const folder = isAbsolute(r.action.folder) ? base(r.action.folder) : r.action.folder
   if (r.action.group === 'year') return tr('Move to {0}, by year', folder)
   if (r.action.group === 'month') return tr('Move to {0}, by month', folder)

@@ -61,6 +61,7 @@ export function entryMenu(entries: Entry[]): Promise<void> {
     { text: tr('Show in Finder'), action: () => void revealEntries(entries) },
     'separator',
     moveMenu(entries),
-    { text: tr('Move to Trash'), action: () => void st().trash(entries) },
+    ...(st().settings.removal === 'trash' ? [{ text: tr('Move to Trash'), action: () => void st().trash(entries) }] : []),
+    { text: tr('Delete Immediately…'), action: () => void st().deleteNow(entries) },
   ])
 }
