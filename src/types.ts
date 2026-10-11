@@ -57,6 +57,8 @@ export interface Folder {
   rules: Rule[]
   auto: boolean
   allowProject: boolean
+  cleanup: boolean
+  lastCleanup: number
   known: KnownFolder | null
 }
 
@@ -66,11 +68,13 @@ export interface Settings {
   recursive: boolean
   staleDays: number
   removal: 'trash' | 'delete'
+  menuBar: boolean
+  notify: boolean
 }
 
-export type OpAction = 'move' | 'trash' | 'delete'
+export type OpAction = 'move' | 'trash' | 'delete' | 'extract'
 export type OpStatus = 'pending' | 'done' | 'failed' | 'skipped' | 'undone' | 'undoFailed'
-export type BatchKind = 'sort' | 'auto' | 'duplicates' | 'move' | 'trash' | 'delete'
+export type BatchKind = 'sort' | 'auto' | 'duplicates' | 'move' | 'trash' | 'delete' | 'rename' | 'extract' | 'cleanup'
 
 export interface OpRecord {
   action: OpAction
@@ -165,4 +169,21 @@ export interface Dropped {
   added: string[]
   failures: Failure[]
   files: boolean
+}
+
+export interface Insights {
+  extracted: { archive: string; folder: string }[]
+  installed: string[]
+}
+
+export interface SimilarGroup {
+  id: string
+  files: Entry[]
+  keep: string
+}
+
+export interface TrayFolder {
+  path: string
+  name: string
+  pending: number
 }

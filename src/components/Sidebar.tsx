@@ -118,6 +118,7 @@ export function Sidebar() {
               badge={dupes?.status === 'running' ? <Spinner size={11} /> : extra ? count(extra) : undefined}
             />
             <Item icon="rules" label={tr('Rules')} on={at('rules')} onClick={() => go('rules')} badge={count(folder.rules.filter((r) => r.enabled).length)} />
+            <Item icon="cards" label={tr('One by one')} on={at('triage')} onClick={() => go('triage')} />
             <Item icon="history" label={tr('History')} on={at('history')} onClick={() => go('history')} />
           </div>
         )}

@@ -1,5 +1,7 @@
+mod alerts;
 mod dupes;
 mod engine;
+mod insights;
 mod kinds;
 mod menu;
 mod meta;
@@ -8,9 +10,11 @@ mod ops;
 mod projects;
 mod rules;
 mod scan;
+mod similar;
 mod store;
 #[cfg(test)]
 mod testutil;
+mod tray;
 mod watch;
 
 use crate::dupes::{DupGroup, Progress};
@@ -33,6 +37,8 @@ struct App {
     watch: Arc<watch::Watch>,
     jobs: Mutex<HashMap<String, Arc<AtomicBool>>>,
     menu: Mutex<Option<menu::Items>>,
+    similar: Arc<similar::Cache>,
+    tray: Mutex<Option<tauri::tray::TrayIcon>>,
 }
 
 type AppState<'a> = State<'a, App>;
@@ -45,6 +51,8 @@ struct FolderView {
     rules: Vec<Rule>,
     auto: bool,
     allow_project: bool,
+    cleanup: bool,
+    last_cleanup: i64,
     known: Option<&'static str>,
 }
 
@@ -98,6 +106,8 @@ fn view(app: &AppHandle, f: FolderConfig) -> FolderView {
         rules: f.rules,
         auto: f.auto,
         allow_project: f.allow_project,
+        cleanup: f.cleanup,
+        last_cleanup: f.last_cleanup,
         known,
     }
 }
@@ -410,11 +420,113 @@ fn set_settings(app: AppHandle, state: AppState, settings: Settings) -> Outcome<
     c.settings = settings.clone();
     state.core.save_config(&c)?;
     drop(c);
+    if let Some(t) = lock(&state.tray).as_ref() {
+        let _ = t.set_visible(settings.menu_bar);
+    }
     if rescan {
         lock(&state.core.snapshots).clear();
         let _ = app.emit("settings-changed", ());
     }
     Ok(settings)
+}
+
+fn snapshot_for(core: &Core, path: &str, cancel: &AtomicBool) -> Outcome<Arc<Snapshot>> {
+    if let Some(s) = lock(&core.snapshots).get(path).cloned() {
+        return Ok(s);
+    }
+    let opts = {
+        let s = &lock(&core.config).settings;
+        scan::Options {
+            hidden: s.show_hidden,
+            recursive: s.recursive,
+        }
+    };
+    Ok(Arc::new(scan::scan(Path::new(path), opts, cancel)?))
+}
+
+#[tauri::command]
+async fn insights(state: AppState<'_>, path: String) -> Outcome<insights::Insights> {
+    state.core.folder(&path)?;
+    let core = state.core.clone();
+    let cancel = job(&state, &format!("insights:{path}"));
+    blocking(move || {
+        let snap = snapshot_for(&core, &path, &cancel)?;
+        Ok(insights::analyze(&snap.entries))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn similar(
+    app: AppHandle,
+    state: AppState<'_>,
+    path: String,
+) -> Outcome<Vec<similar::SimilarGroup>> {
+    state.core.folder(&path)?;
+    let core = state.core.clone();
+    let cache = state.similar.clone();
+    let cancel = job(&state, &format!("similar:{path}"));
+    blocking(move || {
+        let snap = snapshot_for(&core, &path, &cancel)?;
+        let last = std::cell::Cell::new(None::<Instant>);
+        similar::find(&snap.entries, &cache, &cancel, |p: Progress| {
+            if last
+                .get()
+                .is_none_or(|t| t.elapsed() >= Duration::from_millis(80))
+                || p.done >= p.total
+            {
+                last.set(Some(Instant::now()));
+                let _ = app.emit(
+                    "similar-progress",
+                    JobProgress {
+                        folder: path.clone(),
+                        done: p.done,
+                        total: p.total,
+                    },
+                );
+            }
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+fn read_text(state: AppState, path: String) -> Outcome<String> {
+    use std::io::Read;
+    let p = known_path(&state, &path)?;
+    let mut buf = Vec::new();
+    std::fs::File::open(&p)
+        .and_then(|f| f.take(256 * 1024).read_to_end(&mut buf))
+        .map_err(|e| Failure::io(&e))?;
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
+#[tauri::command]
+fn update_tray(app: AppHandle, state: AppState, folders: Vec<tray::TrayFolder>) {
+    if let Some(t) = lock(&state.tray).as_ref() {
+        tray::update(&app, t, &folders);
+    }
+}
+
+#[tauri::command]
+fn set_cleanup(state: AppState, path: String, on: bool) -> Outcome<()> {
+    let mut c = lock(&state.core.config);
+    let f = c
+        .folders
+        .iter_mut()
+        .find(|f| f.path == path)
+        .ok_or_else(|| Failure::new("unknownfolder", path.clone()))?;
+    f.cleanup = on;
+    if on {
+        f.last_cleanup = model::now_ms();
+    }
+    state.core.save_config(&c)
+}
+
+#[tauri::command]
+async fn cleanup_now(state: AppState<'_>, path: String) -> Outcome<Option<Batch>> {
+    let core = state.core.clone();
+    blocking(move || core.cleanup(&path)).await
 }
 
 #[tauri::command]
@@ -532,6 +644,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_drag::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let dir = app.path().app_data_dir()?;
@@ -544,11 +658,17 @@ pub fn run() {
             } else {
                 None
             };
+            let tray = tray::create(&handle).ok();
+            if let Some(t) = &tray {
+                let _ = t.set_visible(lock(&core.config).settings.menu_bar);
+            }
             app.manage(App {
                 core,
                 watch,
                 jobs: Mutex::new(HashMap::new()),
                 menu: Mutex::new(items),
+                similar: Arc::new(similar::Cache::default()),
+                tray: Mutex::new(tray),
             });
             sync_roots(&handle, &app.state::<App>());
             let fallback = handle.clone();
@@ -563,10 +683,20 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| menu::forward(app, event.id().as_ref()))
-        .on_window_event(|window, event| {
-            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                 dropped(window.app_handle(), paths);
             }
+            WindowEvent::CloseRequested { api, .. } => {
+                let state = window.app_handle().state::<App>();
+                let keep =
+                    lock(&state.core.config).settings.menu_bar && lock(&state.tray).is_some();
+                if keep {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             boot,
@@ -592,7 +722,19 @@ pub fn run() {
             open_file,
             open_privacy_settings,
             set_inspector_menu,
+            insights,
+            similar,
+            read_text,
+            update_tray,
+            set_cleanup,
+            cleanup_now,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Dropzone");
+        .build(tauri::generate_context!())
+        .expect("error while running Dropzone")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                tray::show_main(_app);
+            }
+        });
 }

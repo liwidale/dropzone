@@ -23,8 +23,11 @@ import { RuleEditor } from './views/RuleEditor'
 import { Rules } from './views/Rules'
 import { DeleteSheet, DupesSheet, ProjectSheet, RecoveredSheet, RemoveSheet, ResultSheet, SettingsSheet } from './views/Sheets'
 import { SortSheet } from './views/SortSheet'
-import { filterEntries } from './visible'
+import { filterEntries, marked } from './visible'
 import { Welcome } from './views/Welcome'
+import { RenameSheet } from './views/RenameSheet'
+import { Triage } from './views/Triage'
+import { PreviewOverlay } from './components/Preview'
 
 const VIEWS: Record<string, View> = { 'view-overview': 'overview', 'view-files': 'files', 'view-duplicates': 'duplicates', 'view-rules': 'rules', 'view-history': 'history' }
 
@@ -39,7 +42,17 @@ function selectedEntries(): Entry[] {
 function visibleEntries(): Entry[] {
   const s = useApp.getState()
   const snap = s.current ? s.snapshots[s.current]?.data : undefined
-  return snap ? filterEntries(snap.entries, { kind: s.kind, preset: s.preset, query: s.query, scope: s.scope, sort: s.sort, staleDays: s.settings.staleDays }) : []
+  return snap
+    ? filterEntries(snap.entries, {
+        kind: s.kind,
+        preset: s.preset,
+        query: s.query,
+        scope: s.scope,
+        sort: s.sort,
+        staleDays: s.settings.staleDays,
+        marked: marked(s.current ? s.insights[s.current] : undefined, s.preset),
+      })
+    : []
 }
 
 const SHORTCUTS: Record<string, string> = {
@@ -77,6 +90,14 @@ const editing = (): boolean => {
 
 function onMenu(id: string): void {
   const s = useApp.getState()
+  if (id.startsWith('sort-folder:')) {
+    const path = id.slice('sort-folder:'.length)
+    if (s.folders.some((f) => f.path === path) && !s.applying) {
+      s.select(path)
+      useApp.setState({ sheet: { type: 'sort' } })
+    }
+    return
+  }
   if (VIEWS[id]) {
     if (s.current && !s.sheet) s.go(VIEWS[id], VIEWS[id] === 'files' ? { kind: null, preset: null } : {})
     return
@@ -156,6 +177,7 @@ function Body() {
         {view === 'duplicates' && <Duplicates />}
         {view === 'rules' && <Rules />}
         {view === 'history' && <History />}
+        {view === 'triage' && <Triage />}
       </motion.div>
     </AnimatePresence>
   )
@@ -169,14 +191,15 @@ function Sheets() {
       {sheet && (
         <motion.div key={key}>
           {sheet.type === 'sort' && <SortSheet />}
-          {sheet.type === 'rule' && <RuleEditor rule={sheet.rule} />}
+          {sheet.type === 'rule' && <RuleEditor rule={sheet.rule} draft={sheet.draft} />}
           {sheet.type === 'settings' && <SettingsSheet />}
-          {sheet.type === 'dupes' && <DupesSheet />}
+          {sheet.type === 'dupes' && <DupesSheet source={sheet.source} />}
           {sheet.type === 'recovered' && <RecoveredSheet batch={sheet.batch} />}
           {sheet.type === 'remove' && <RemoveSheet path={sheet.path} />}
           {sheet.type === 'result' && <ResultSheet batch={sheet.batch} />}
           {sheet.type === 'project' && <ProjectSheet entries={sheet.entries} dir={sheet.dir} />}
           {sheet.type === 'delete' && <DeleteSheet entries={sheet.entries} />}
+          {sheet.type === 'rename' && <RenameSheet entries={sheet.entries} />}
         </motion.div>
       )}
     </AnimatePresence>
@@ -186,8 +209,9 @@ function Sheets() {
 function Toast() {
   const toast = useApp((s) => s.toast)
   const undo = useApp((s) => s.undo)
+  const raised = useApp((s) => s.view === 'triage')
   return (
-    <div className="toast-host" aria-live="polite">
+    <div className={`toast-host${raised ? ' raised' : ''}`} aria-live="polite">
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -200,6 +224,17 @@ function Toast() {
           >
             {toast.tone === 'error' && <Icon name="alert" size={13} />}
             <span>{toast.text}</span>
+            {toast.rule && (
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  useApp.setState({ toast: null, sheet: { type: 'rule', rule: null, draft: toast.rule } })
+                }}
+              >
+                {tr('Make a rule')}
+              </button>
+            )}
             {toast.undo && (
               <button
                 type="button"
@@ -225,6 +260,14 @@ export function App() {
   const hasFolders = useApp((s) => s.folders.length > 0)
   const dropping = useApp((s) => s.dropping)
   const inspector = useApp((s) => s.inspector)
+  const preview = useApp((s) => s.preview)
+  const folders = useApp((s) => s.folders)
+  const plans = useApp((s) => s.plans)
+
+  useEffect(() => {
+    const items = folders.map((f) => ({ path: f.path, name: f.name, pending: plans[f.path]?.data?.ops.length ?? 0 }))
+    void api.updateTray(items).catch(() => undefined)
+  }, [folders, plans])
 
   useEffect(() => {
     void useApp.getState().boot()
@@ -252,6 +295,12 @@ export function App() {
         useApp.setState((s) => {
           const d = s.dupes[p.folder]
           return d && d.status === 'running' ? { dupes: { ...s.dupes, [p.folder]: { ...d, done: p.done, total: p.total } } } : {}
+        }),
+      ),
+      on.similarProgress((p) =>
+        useApp.setState((s) => {
+          const d = s.similar[p.folder]
+          return d && d.status === 'running' ? { similar: { ...s.similar, [p.folder]: { ...d, done: p.done, total: p.total } } } : {}
         }),
       ),
       on.applyProgress((p) => useApp.setState((s) => (s.applying ? { applying: { done: p.done, total: p.total } } : {}))),
@@ -311,6 +360,7 @@ export function App() {
         <Welcome />
       )}
       <Sheets />
+      <AnimatePresence>{preview && <PreviewOverlay list={visibleEntries} />}</AnimatePresence>
       <Toast />
       <AnimatePresence>
         {dropping && (

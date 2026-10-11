@@ -143,11 +143,11 @@ function ConditionEditor({ c, onChange, onRemove }: { c: Condition; onChange: (c
   )
 }
 
-export function RuleEditor({ rule }: { rule: Rule | null }) {
+export function RuleEditor({ rule, draft: start }: { rule: Rule | null; draft?: Rule }) {
   const folder = useApp(folderOf)!
   const removal = useApp((s) => s.settings.removal)
   const { set, saveRules } = useApp.getState()
-  const [draft, setDraft] = useState<Rule>(() => rule ?? { id: '', name: '', enabled: true, conditions: [{ type: 'kind', kinds: [] }], action: { type: 'move', folder: '', group: 'none' } })
+  const [draft, setDraft] = useState<Rule>(() => rule ?? start ?? { id: '', name: '', enabled: true, conditions: [{ type: 'kind', kinds: [] }], action: { type: 'move', folder: '', group: 'none' } })
   const [preview, setPreview] = useState<RulePreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

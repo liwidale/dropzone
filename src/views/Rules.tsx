@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, asFailure } from '../api'
 import { actionText, failureText, ruleSummary } from '../copy'
 import { Btn, Group, Row, Toggle } from '../components/ui'
-import { count } from '../format'
+import { count, longDate } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
 import { popup } from '../menu'
 import { folderOf, useApp } from '../store'
 import type { Rule } from '../types'
+
+const WEEK = 7 * 86_400_000
 
 function RuleRow({
   rule,
@@ -78,6 +80,7 @@ function RuleRow({
 }
 
 export function Rules() {
+  const trashRules = useApp(folderOf)!.rules.some((r) => r.enabled && r.action.type === 'trash')
   const folder = useApp(folderOf)!
   const plan = useApp((s) => s.plans[s.current!]?.data)
   const { saveRules, setAuto, set } = useApp.getState()
@@ -177,6 +180,23 @@ export function Rules() {
             )}
           >
             <Toggle label={tr('Sort new files automatically')} on={folder.auto} onChange={(v) => void setAuto(folder.path, v)} />
+          </Row>
+          <Row
+            title={tr('Clean up once a week')}
+            desc={
+              trashRules
+                ? folder.cleanup
+                  ? tr('Rules that move files to the Trash run on their own every week, always using the Trash so you can undo them. Next cleanup: {0}.', longDate(folder.lastCleanup + WEEK))
+                  : tr('Rules that move files to the Trash run on their own every week, always using the Trash so you can undo them.')
+                : tr('Add a rule that moves files to the Trash, for example installers older than 30 days, to use weekly cleanup.')
+            }
+          >
+            {folder.cleanup && (
+              <Btn kind="ghost" onClick={() => void useApp.getState().cleanupNow(folder.path)}>
+                {tr('Run now')}
+              </Btn>
+            )}
+            <Toggle label={tr('Clean up once a week')} on={folder.cleanup} disabled={!trashRules && !folder.cleanup} onChange={(v) => void useApp.getState().setCleanup(folder.path, v)} />
           </Row>
         </Group>
 

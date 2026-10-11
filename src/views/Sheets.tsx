@@ -7,13 +7,14 @@ import { Bar, Btn, Row, Select, Seg, Sheet, Toggle } from '../components/ui'
 import { base, bytes, relative } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
+import { isMac } from '../platform'
 import { useApp } from '../store'
 import type { Batch, Entry } from '../types'
 import { doomed } from './Duplicates'
 
-export function DupesSheet() {
+export function DupesSheet({ source }: { source?: 'similar' }) {
   const current = useApp((s) => s.current)!
-  const d = useApp((s) => s.dupes[current])
+  const d = useApp((s) => (source === 'similar' ? s.similar[current] : s.dupes[current]))
   const applying = useApp((s) => s.applying)
   const { set, run } = useApp.getState()
   const files = doomed(d)
@@ -238,6 +239,15 @@ export function SettingsSheet() {
                 { value: 'delete', label: tr('Delete immediately') },
               ]}
             />
+          </Row>
+          <Row
+            title={isMac ? tr('Show in menu bar') : tr('Show in system tray')}
+            desc={tr('Shows how many files are waiting to be sorted. Closing the window keeps Dropzone running there, so automatic sorting and cleanup keep working.')}
+          >
+            <Toggle label={tr('Show in menu bar')} on={s.menuBar} onChange={(v) => void setSettings({ menuBar: v })} />
+          </Row>
+          <Row title={tr('Notifications')} desc={tr('Tells you when Dropzone sorts new files or cleans up on its own.')}>
+            <Toggle label={tr('Notifications')} on={s.notify} onChange={(v) => void setSettings({ notify: v })} />
           </Row>
           <Row title={tr('Look inside subfolders')} desc={tr('Shows and compares files in subfolders too. Sorting always works on the top level only.')}>
             <Toggle label={tr('Look inside subfolders')} on={s.recursive} onChange={(v) => void setSettings({ recursive: v })} />

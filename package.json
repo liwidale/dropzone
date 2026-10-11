@@ -20,6 +20,7 @@
     "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
+    "@crabnebula/tauri-plugin-drag": "^2.1.0",
     "@tauri-apps/api": "^2.12.3"
   },
   "devDependencies": {

@@ -22,6 +22,21 @@ function Storage() {
   }, [snap])
   const total = snap.totalSize || 1
   const loose = snap.entries.filter((e) => !e.dir).length
+  const history = useApp((s) => s.history)
+  const month = useMemo(() => {
+    const since = Date.now() - 30 * 86_400_000
+    let sorted = 0
+    let removed = 0
+    for (const b of history) {
+      if (b.folder !== snap.root || b.created < since) continue
+      for (const o of b.ops) {
+        if (o.status !== 'done') continue
+        if (o.action === 'trash' || o.action === 'delete') removed += o.size
+        else if (b.kind === 'sort' || b.kind === 'auto') sorted += 1
+      }
+    }
+    return { sorted, removed }
+  }, [history, snap.root])
   return (
     <section className="storage">
       <div className="storage-head">
@@ -47,6 +62,14 @@ function Storage() {
           </button>
         ))}
       </div>
+      {(month.sorted > 0 || month.removed > 0) && (
+        <div className="storage-foot">
+          <Icon name="sparkle" size={12} />
+          {month.removed > 0
+            ? tr('In the last 30 days Dropzone sorted {0} file and removed {1}.|In the last 30 days Dropzone sorted {0} files and removed {1}.', month.sorted, bytes(month.removed))
+            : tr('In the last 30 days Dropzone sorted {0} file.|In the last 30 days Dropzone sorted {0} files.', month.sorted)}
+        </div>
+      )}
     </section>
   )
 }
@@ -60,7 +83,14 @@ function Suggestions() {
   const staleDays = useApp((s) => s.settings.staleDays)
   const { set, go } = useApp.getState()
 
-  const stale = snap.entries.filter((e) => matchesPreset(e, 'stale-installers', staleDays))
+  const insights = useApp((s) => s.insights[current])
+  const removal = useApp((s) => s.settings.removal)
+  const installedSet = new Set(insights?.installed ?? [])
+  const extractedSet = new Set(insights?.extracted.map((x) => x.archive) ?? [])
+  const installed = snap.entries.filter((e) => installedSet.has(e.path))
+  const extracted = snap.entries.filter((e) => extractedSet.has(e.path))
+  const removeLabel = removal === 'delete' ? tr('Delete…') : tr('Move to Trash')
+  const stale = snap.entries.filter((e) => matchesPreset(e, 'stale-installers', staleDays) && !installedSet.has(e.path))
   const unfinished = snap.entries.filter((e) => e.kind === 'partial')
   const large = snap.entries.filter((e) => e.size >= LARGE)
   const extra = dupes?.groups.reduce((n, g) => n + g.files.length - 1, 0) ?? 0
@@ -119,6 +149,33 @@ function Suggestions() {
         <Row icon="copies" title={tr('No duplicates')} desc={tr('Every file in {0} is unique.', folder.name)} />
       ) : null}
 
+      {installed.length > 0 && (
+        <Row
+          icon="installer"
+          tone="var(--violet)"
+          title={tr('{0} installer is for an app you already have|{0} installers are for apps you already have', installed.length)}
+          desc={tr('{0}. The apps are installed, so these installers are usually safe to remove.', sum(installed))}
+        >
+          <Btn onClick={() => go('files', { kind: null, preset: 'installed' })}>{tr('Show')}</Btn>
+          <Btn onClick={() => void useApp.getState().trash(installed)}>{removeLabel}</Btn>
+        </Row>
+      )}
+      {extracted.length > 0 && (
+        <Row
+          icon="archive"
+          tone="var(--brown)"
+          title={tr('{0} archive is already extracted|{0} archives are already extracted', extracted.length)}
+          desc={tr('{0}. The contents sit in a folder next to each archive, so the archive itself can go.', sum(extracted))}
+        >
+          <Btn onClick={() => go('files', { kind: null, preset: 'extracted' })}>{tr('Show')}</Btn>
+          <Btn onClick={() => void useApp.getState().trash(extracted)}>{removeLabel}</Btn>
+        </Row>
+      )}
+      {loose >= 5 && (
+        <Row icon="cards" tone="var(--blue)" title={tr('Go through files one by one')} desc={tr('{0} loose files. Keep, move or remove each one with a single key.', loose)}>
+          <Btn onClick={() => go('triage')}>{tr('Start')}</Btn>
+        </Row>
+      )}
       {stale.length > 0 && (
         <Row
           icon="installer"

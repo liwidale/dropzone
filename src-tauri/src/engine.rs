@@ -1,4 +1,5 @@
 use crate::dupes;
+use crate::insights;
 use crate::model::{now_ms, time_ms, Entry, Failure, Kind, Outcome, Snapshot};
 use crate::ops;
 use crate::projects;
@@ -14,6 +15,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 const SETTLE_MS: i64 = 4_000;
+pub const CLEANUP_EVERY_MS: i64 = 7 * 86_400_000;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,9 +85,14 @@ impl Guard {
             return Ok(());
         };
         let allowed = match self.kind {
-            BatchKind::Sort | BatchKind::Auto => project == self.root && self.allow_root,
+            BatchKind::Sort | BatchKind::Auto | BatchKind::Cleanup => {
+                project == self.root && self.allow_root
+            }
             BatchKind::Duplicates => false,
-            BatchKind::Move | BatchKind::Trash | BatchKind::Delete => self.allow_projects,
+            BatchKind::Extract => true,
+            BatchKind::Move | BatchKind::Trash | BatchKind::Delete | BatchKind::Rename => {
+                self.allow_projects
+            }
         };
         if allowed {
             Ok(())
@@ -200,6 +207,8 @@ impl Core {
             auto: false,
             auto_since: 0,
             allow_project: false,
+            cleanup: false,
+            last_cleanup: 0,
         };
         c.folders.push(folder.clone());
         self.save_config(&c)?;
@@ -263,6 +272,49 @@ impl Core {
         } else {
             Err(Failure::new("outside", p.display().to_string()))
         }
+    }
+
+    pub fn due_cleanups(&self) -> Vec<String> {
+        let now = now_ms();
+        lock(&self.config)
+            .folders
+            .iter()
+            .filter(|f| f.cleanup && now - f.last_cleanup >= CLEANUP_EVERY_MS)
+            .map(|f| f.path.clone())
+            .collect()
+    }
+
+    pub fn cleanup(&self, folder: &str) -> Outcome<Option<Batch>> {
+        let plan = self.plan(folder, true)?;
+        {
+            let mut c = lock(&self.config);
+            if let Some(f) = c.folders.iter_mut().find(|f| f.path == folder) {
+                f.last_cleanup = now_ms();
+            }
+            self.save_config(&c)?;
+        }
+        let ops: Vec<OpRequest> = plan
+            .ops
+            .into_iter()
+            .filter(|o| o.action == OpAction::Trash)
+            .map(|o| OpRequest {
+                action: OpAction::Trash,
+                source: o.source,
+                destination: None,
+                size: o.size,
+                modified: o.modified,
+            })
+            .collect();
+        if ops.is_empty() {
+            return Ok(None);
+        }
+        let req = ApplyRequest {
+            folder: folder.to_string(),
+            kind: BatchKind::Cleanup,
+            ops,
+            allow_projects: false,
+        };
+        self.apply(req, &|_, _| {}).map(Some)
     }
 
     pub fn plan(&self, folder: &str, settled_only: bool) -> Outcome<Plan> {
@@ -401,6 +453,13 @@ impl Core {
                     return Err(Failure::new("same", op.source.clone()));
                 }
                 ops::create_dirs(&dir, dirs).map_err(|e| Failure::io(&e))?;
+                if ops::same_file(&src, &wanted) {
+                    op.target = Some(wanted.display().to_string());
+                    journal.step(i, op, &[]);
+                    fs::rename(&src, &wanted).map_err(|e| Failure::io(&e))?;
+                    op.status = OpStatus::Done;
+                    return Ok(());
+                }
                 let mut target = ops::free_path(&dir, &name, |_| false);
                 op.target = Some(target.display().to_string());
                 journal.step(
@@ -435,6 +494,23 @@ impl Core {
             OpAction::Delete => {
                 journal.step(i, op, &[]);
                 ops::remove_tree(&src).map_err(|e| Failure::io(&e))?;
+                op.status = OpStatus::Done;
+            }
+            OpAction::Extract => {
+                let (wanted, strip) =
+                    insights::extract_target(&src).map_err(|e| Failure::io(&e))?;
+                let dir = wanted.parent().ok_or_else(|| Failure::new("io", ""))?;
+                let name = wanted
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let target = ops::free_path(dir, &name, |_| false);
+                op.target = Some(target.display().to_string());
+                journal.step(i, op, &[]);
+                insights::extract(&src, &target, strip.as_deref()).map_err(|e| {
+                    op.target = None;
+                    Failure::io(&e)
+                })?;
                 op.status = OpStatus::Done;
             }
         }
@@ -526,6 +602,12 @@ impl Core {
                 .as_deref()
                 .is_some_and(|t| ops::exists(Path::new(t)));
             match (op.action, src_there, target_there) {
+                (OpAction::Extract, _, true) => {
+                    let _ = fs::remove_dir_all(op.target.as_deref().unwrap_or_default());
+                    op.status = OpStatus::Failed;
+                    op.failure = Some(Failure::new("interrupted", ""));
+                    op.target = None;
+                }
                 (OpAction::Move, false, true)
                 | (OpAction::Trash, false, _)
                 | (OpAction::Delete, false, _) => op.status = OpStatus::Done,
@@ -564,6 +646,15 @@ fn sweep_partials(dir: &Path) {
 }
 
 fn undo_op(op: &mut OpRecord) -> Outcome<()> {
+    if op.action == OpAction::Extract {
+        let Some(target) = op.target.clone().map(PathBuf::from) else {
+            return Ok(());
+        };
+        if ops::exists(&target) {
+            ops::trash(&target).map_err(|e| Failure::io(&e))?;
+        }
+        return Ok(());
+    }
     let source = PathBuf::from(&op.source);
     let Some(target) = op.target.clone().map(PathBuf::from) else {
         return Err(Failure::new(
@@ -594,6 +685,10 @@ fn undo_op(op: &mut OpRecord) -> Outcome<()> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
+    if ops::same_file(&target, &source) {
+        fs::rename(&target, &source).map_err(|e| Failure::io(&e))?;
+        return Ok(());
+    }
     let dest = ops::free_path(dir, &name, |_| false);
     ops::move_item(&target, &dest).map_err(|e| Failure::io(&e))?;
     if op.action == OpAction::Trash {
@@ -919,6 +1014,130 @@ mod tests {
         let after = core.undo(&batch.id).unwrap();
         assert!(after.ops.iter().all(|o| o.status == OpStatus::Done));
         assert!(!file.exists());
+    }
+
+    #[test]
+    fn extracts_and_cleans_up_with_undo() {
+        use std::io::Write;
+        let data = TempDir::new("data");
+        let home = TempDir::new("home");
+        let zip_path = home.path().join(format!("pack-{}.zip", rules::new_id("")));
+        {
+            let mut w = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+            w.start_file("inner.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            w.write_all(b"inside").unwrap();
+            w.finish().unwrap();
+        }
+        let core = Core::open(data.path().to_path_buf());
+        let folder = core.add_folder(home.path()).unwrap();
+        let md = fs::metadata(&zip_path).unwrap();
+        let batch = core
+            .apply(
+                ApplyRequest {
+                    folder: folder.path.clone(),
+                    kind: BatchKind::Extract,
+                    ops: vec![OpRequest {
+                        action: OpAction::Extract,
+                        source: zip_path.display().to_string(),
+                        destination: None,
+                        size: md.len(),
+                        modified: time_ms(md.modified()),
+                    }],
+                    allow_projects: false,
+                },
+                &|_, _| {},
+            )
+            .unwrap();
+        let target = PathBuf::from(batch.ops[0].target.clone().unwrap());
+        assert_eq!(fs::read(target.join("inner.txt")).unwrap(), b"inside");
+        let undone = core.undo(&batch.id).unwrap();
+        assert_eq!(undone.ops[0].status, OpStatus::Undone);
+        assert!(!target.exists());
+        assert!(zip_path.exists());
+
+        let old = home.file(&format!("old-{}.tmp", rules::new_id("")), b"junk");
+        let mut c = lock(&core.config);
+        let f = c
+            .folders
+            .iter_mut()
+            .find(|f| f.path == folder.path)
+            .unwrap();
+        f.rules = vec![Rule {
+            id: "c".into(),
+            name: "Temp files".into(),
+            enabled: true,
+            conditions: vec![rules::Condition::Extension {
+                extensions: vec!["tmp".into()],
+            }],
+            action: Action::Trash,
+        }];
+        f.cleanup = true;
+        f.last_cleanup = 0;
+        drop(c);
+        assert_eq!(core.due_cleanups(), vec![folder.path.clone()]);
+        let set_old = fs::File::options().write(true).open(&old).unwrap();
+        set_old
+            .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(60))
+            .unwrap();
+        let cleaned = core.cleanup(&folder.path).unwrap().unwrap();
+        assert_eq!(cleaned.kind, BatchKind::Cleanup);
+        assert_eq!(cleaned.ops[0].status, OpStatus::Done);
+        assert!(!old.exists());
+        assert!(core.due_cleanups().is_empty());
+        core.undo(&cleaned.id).unwrap();
+        assert!(old.exists());
+    }
+
+    #[test]
+    fn renames_including_case_changes() {
+        let data = TempDir::new("data");
+        let home = TempDir::new("home");
+        let a = home.file("Photo.JPG", b"img");
+        let b = home.file("notes.txt", b"txt");
+        let core = Core::open(data.path().to_path_buf());
+        let folder = core.add_folder(home.path()).unwrap();
+        let op = |p: &Path, to: &str| {
+            let md = fs::metadata(p).unwrap();
+            OpRequest {
+                action: OpAction::Move,
+                source: p.display().to_string(),
+                destination: Some(home.path().join(to).display().to_string()),
+                size: md.len(),
+                modified: time_ms(md.modified()),
+            }
+        };
+        let batch = core
+            .apply(
+                ApplyRequest {
+                    folder: folder.path.clone(),
+                    kind: BatchKind::Rename,
+                    ops: vec![op(&a, "photo.jpg"), op(&b, "2026 notes.txt")],
+                    allow_projects: false,
+                },
+                &|_, _| {},
+            )
+            .unwrap();
+        assert!(
+            batch.ops.iter().all(|o| o.status == OpStatus::Done),
+            "{:?}",
+            batch.ops
+        );
+        let names: Vec<String> = fs::read_dir(home.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"photo.jpg".to_string()), "{names:?}");
+        assert!(names.contains(&"2026 notes.txt".to_string()));
+        core.undo(&batch.id).unwrap();
+        let names: Vec<String> = fs::read_dir(home.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"Photo.JPG".to_string()), "{names:?}");
+        assert!(names.contains(&"notes.txt".to_string()));
     }
 
     #[test]

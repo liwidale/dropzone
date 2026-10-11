@@ -46,6 +46,20 @@ function Actions({ entries }: { entries: Entry[] }) {
           {removal === 'delete' ? tr('Delete…') : tr('Trash')}
         </Btn>
       </div>
+      <div className="insp-pair">
+        <Btn icon="edit" disabled={busy} onClick={() => useApp.setState({ sheet: { type: 'rename', entries } })}>
+          {tr('Rename…')}
+        </Btn>
+        {entries.some((e) => e.ext === 'zip') ? (
+          <Btn icon="extract" disabled={busy} onClick={() => void useApp.getState().extract(entries)}>
+            {tr('Extract')}
+          </Btn>
+        ) : (
+          <Btn icon="eye" disabled={entries.length !== 1} onClick={() => useApp.setState({ preview: entries[0].path })}>
+            {tr('Quick Look')}
+          </Btn>
+        )}
+      </div>
     </div>
   )
 }

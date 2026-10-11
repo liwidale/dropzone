@@ -1,12 +1,13 @@
 import { entryMenu, openEntries } from '../actions'
 import { FileGlyph } from '../components/FileGlyph'
-import { Bar, Btn, Empty, Spinner } from '../components/ui'
+import { useEffect, useState } from 'react'
+import { Bar, Btn, Empty, Seg, Spinner } from '../components/ui'
 import { bytes, relative, when } from '../format'
 import { tr } from '../i18n'
-import { folderOf, useApp, type Dupes } from '../store'
-import type { DupGroup, Entry } from '../types'
+import { folderOf, useApp } from '../store'
+import type { DupGroup, Entry, SimilarGroup } from '../types'
 
-export function doomed(d: Dupes | undefined): Entry[] {
+export function doomed(d: { groups: { id: string; files: Entry[]; keep: string }[]; kept: Record<string, string[]> } | undefined): Entry[] {
   if (!d) return []
   return d.groups.flatMap((g) => g.files.filter((f) => !(d.kept[g.id] ?? [g.keep]).includes(f.path)))
 }
@@ -60,7 +61,7 @@ function GroupCard({ g, kept, root, onToggle }: { g: DupGroup; kept: string[]; r
   )
 }
 
-export function Duplicates() {
+function ExactCopies() {
   const current = useApp((s) => s.current)!
   const folder = useApp(folderOf)!
   const d = useApp((s) => s.dupes[current])
@@ -148,6 +149,166 @@ export function Duplicates() {
           {removal === 'delete' ? tr('Delete…') : tr('Move to Trash…')}
         </Btn>
       </footer>
+    </div>
+  )
+}
+
+function SimilarCard({ g, kept, onToggle }: { g: SimilarGroup; kept: string[]; onToggle: (path: string) => void }) {
+  const removal = useApp((s) => s.settings.removal)
+  return (
+    <section className="dupe">
+      <header className="dupe-head">
+        <div className="row-text">
+          <div className="row-title">{tr('{0} similar images', g.files.length)}</div>
+          <div className="row-desc">{tr('Dropzone suggests keeping the largest one.')}</div>
+        </div>
+      </header>
+      <div className="similar-grid">
+        {g.files.map((f) => {
+          const keep = kept.includes(f.path)
+          const last = keep && kept.length === 1
+          return (
+            <div
+              key={f.path}
+              className={`similar-tile${keep ? '' : ' gone'}`}
+              onDoubleClick={() => useApp.setState({ preview: f.path, selection: [f.path], anchor: f.path })}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                void entryMenu([f])
+              }}
+            >
+              <FileGlyph entry={f} size={132} />
+              <div className="similar-name ellipsis" title={f.name}>
+                {f.name}
+              </div>
+              <div className="dupe-meta">
+                {bytes(f.size)} · {when(f.added)}
+              </div>
+              <button
+                type="button"
+                className={`chip ${keep ? 'chip-keep' : 'chip-trash'}`}
+                disabled={last}
+                title={last ? tr('One image always stays.') : undefined}
+                aria-pressed={keep}
+                onClick={() => onToggle(f.path)}
+              >
+                {keep ? tr('Keep') : removal === 'delete' ? tr('Delete') : tr('Move to Trash')}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function SimilarImages() {
+  const current = useApp((s) => s.current)!
+  const folder = useApp(folderOf)!
+  const s = useApp((st) => st.similar[current])
+  const removal = useApp((st) => st.settings.removal)
+  const applying = useApp((st) => !!st.applying)
+  const { set, loadSimilar } = useApp.getState()
+
+  useEffect(() => {
+    if (!useApp.getState().similar[current]) void loadSimilar(current)
+  }, [current, loadSimilar])
+
+  const toggle = (g: SimilarGroup, path: string) => {
+    if (!s) return
+    const kept = s.kept[g.id] ?? [g.keep]
+    const next = kept.includes(path) ? kept.filter((p) => p !== path) : [...kept, path]
+    if (!next.length) return
+    set({ similar: { ...useApp.getState().similar, [current]: { ...s, kept: { ...s.kept, [g.id]: next } } } })
+  }
+
+  if (!s || (s.status === 'running' && !s.groups.length)) {
+    const pct = s && s.total ? Math.round((s.done / s.total) * 100) : 0
+    return (
+      <div className="center-state">
+        <Spinner size={18} />
+        <div className="empty-title">{tr('Looking at your images…')}</div>
+        <div className="empty-text">{tr('Dropzone compares how images look, so resized copies and nearly identical screenshots are found too.')}</div>
+        <div className="center-bar">
+          <Bar value={s?.done ?? 0} total={s?.total || 1} />
+          <span>{tr('{0}%', pct)}</span>
+        </div>
+      </div>
+    )
+  }
+  if (s.status === 'error' && !s.groups.length) {
+    return (
+      <Empty icon="alert" title={tr('Couldn’t compare images')} actions={<Btn onClick={() => void loadSimilar(current)}>{tr('Try again')}</Btn>}>
+        {tr('Some images couldn’t be read. Check that the folder is still available.')}
+      </Empty>
+    )
+  }
+  if (!s.groups.length) {
+    return (
+      <Empty
+        icon="similar"
+        title={tr('No similar images')}
+        actions={
+          <Btn icon="refresh" onClick={() => void loadSimilar(current)}>
+            {tr('Check again')}
+          </Btn>
+        }
+      >
+        {tr('No images in {0} look alike. PNG, JPEG, GIF, WebP, BMP and TIFF images are compared.', folder.name)}
+      </Empty>
+    )
+  }
+  const gone = doomed(s)
+  const freed = gone.reduce((n, f) => n + f.size, 0)
+  return (
+    <div className="dupes">
+      <div className="page scroll">
+        <div className="page-inner">
+          <div className="dupes-intro">
+            <p>{tr('These images look almost the same, for example resized copies or a series of screenshots. Double-click an image to look at it closely.')}</p>
+            {s.status === 'running' && (
+              <span className="inline-state">
+                <Spinner size={11} /> {tr('Checking again…')}
+              </span>
+            )}
+          </div>
+          {s.groups.map((g) => (
+            <SimilarCard key={g.id} g={g} kept={s.kept[g.id] ?? [g.keep]} onToggle={(p) => toggle(g, p)} />
+          ))}
+        </div>
+      </div>
+      <footer className="actionbar">
+        <div className="actionbar-text">
+          {gone.length
+            ? removal === 'delete'
+              ? tr('{0} image is deleted and frees {1}.|{0} images are deleted and free {1}.', gone.length, bytes(freed))
+              : tr('{0} image moves to the Trash and frees {1}.|{0} images move to the Trash and free {1}.', gone.length, bytes(freed))
+            : tr('All images are kept.')}
+        </div>
+        <Btn kind="primary" icon="trash" disabled={!gone.length || applying} onClick={() => set({ sheet: { type: 'dupes', source: 'similar' } })}>
+          {removal === 'delete' ? tr('Delete…') : tr('Move to Trash…')}
+        </Btn>
+      </footer>
+    </div>
+  )
+}
+
+export function Duplicates() {
+  const [tab, setTab] = useState<'exact' | 'similar'>('exact')
+  return (
+    <div className="dupes-wrap">
+      <div className="filterbar">
+        <Seg
+          label={tr('Show')}
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'exact', label: tr('Exact copies') },
+            { value: 'similar', label: tr('Similar images') },
+          ]}
+        />
+      </div>
+      {tab === 'exact' ? <ExactCopies /> : <SimilarImages />}
     </div>
   )
 }

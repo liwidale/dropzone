@@ -2,12 +2,13 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { create } from 'zustand'
 import { api, asFailure } from './api'
 import { describeBatch, failureText } from './copy'
-import { join, parent } from './format'
+import { inside, join, parent, relative } from './format'
+import { inferRule } from './infer'
 import { tr } from './i18n'
-import type { ApplyRequest, Batch, DupGroup, Entry, Failure, Folder, Kind, KnownFolder, Plan, Rule, Settings, Snapshot } from './types'
+import type { ApplyRequest, Batch, DupGroup, Entry, Failure, Folder, Insights, Kind, KnownFolder, Plan, Rule, Settings, SimilarGroup, Snapshot } from './types'
 
-export type View = 'overview' | 'files' | 'duplicates' | 'rules' | 'history'
-export type Preset = 'stale-installers' | 'unfinished' | 'large'
+export type View = 'overview' | 'files' | 'duplicates' | 'rules' | 'history' | 'triage'
+export type Preset = 'stale-installers' | 'unfinished' | 'large' | 'installed' | 'extracted'
 export type SortKey = 'name' | 'kind' | 'size' | 'added'
 export type Scope = 'top' | 'all'
 
@@ -26,11 +27,20 @@ export interface Dupes {
   failure?: Failure
 }
 
+export interface Similar {
+  status: 'running' | 'ready' | 'error'
+  groups: SimilarGroup[]
+  done: number
+  total: number
+  kept: Record<string, string[]>
+}
+
 export type Sheet =
   | { type: 'sort' }
-  | { type: 'rule'; rule: Rule | null }
+  | { type: 'rule'; rule: Rule | null; draft?: Rule }
+  | { type: 'rename'; entries: Entry[] }
   | { type: 'settings' }
-  | { type: 'dupes' }
+  | { type: 'dupes'; source?: 'similar' }
   | { type: 'recovered'; batch: Batch }
   | { type: 'remove'; path: string }
   | { type: 'result'; batch: Batch }
@@ -42,6 +52,7 @@ export interface Toast {
   text: string
   tone: 'neutral' | 'error'
   undo?: string
+  rule?: Rule
 }
 
 interface State {
@@ -64,6 +75,9 @@ interface State {
   snapshots: Record<string, Loadable<Snapshot>>
   plans: Record<string, Loadable<Plan>>
   dupes: Record<string, Dupes>
+  insights: Record<string, Insights>
+  similar: Record<string, Similar>
+  preview: string | null
   sheet: Sheet | null
   toast: Toast | null
   applying: { done: number; total: number } | null
@@ -76,6 +90,12 @@ interface State {
   load(path: string, quiet?: boolean): Promise<void>
   loadPlan(path: string): Promise<void>
   loadDupes(path: string): Promise<void>
+  loadInsights(path: string): Promise<void>
+  loadSimilar(path: string): Promise<void>
+  extract(entries: Entry[]): Promise<void>
+  rename(changes: { entry: Entry; name: string }[]): Promise<Batch | null>
+  setCleanup(path: string, on: boolean): Promise<void>
+  cleanupNow(path: string): Promise<void>
   addKnown(which: KnownFolder): Promise<void>
   chooseFolder(): Promise<void>
   locateFolder(path: string): Promise<void>
@@ -89,7 +109,7 @@ interface State {
   trash(entries: Entry[], confirmed?: boolean): Promise<void>
   deleteNow(entries: Entry[], confirmed?: boolean): Promise<void>
   moveTo(entries: Entry[], dir: string | null, confirmed?: boolean): Promise<void>
-  flash(text: string, tone?: Toast['tone'], undo?: string): void
+  flash(text: string, tone?: Toast['tone'], undo?: string, rule?: Rule): void
 }
 
 let toastId = 0
@@ -111,7 +131,7 @@ export function applyTheme(theme: Settings['theme']): void {
 
 media.addEventListener('change', () => applyTheme(useApp.getState().settings.theme))
 
-const DEFAULT_SETTINGS: Settings = { theme: 'system', showHidden: false, recursive: true, staleDays: 30, removal: 'trash' }
+const DEFAULT_SETTINGS: Settings = { theme: 'system', showHidden: false, recursive: true, staleDays: 30, removal: 'trash', menuBar: true, notify: true }
 
 export const useApp = create<State>((set, get) => ({
   ready: false,
@@ -133,6 +153,9 @@ export const useApp = create<State>((set, get) => ({
   snapshots: {},
   plans: {},
   dupes: {},
+  insights: {},
+  similar: {},
+  preview: null,
   sheet: null,
   toast: null,
   applying: null,
@@ -156,6 +179,7 @@ export const useApp = create<State>((set, get) => ({
       })
       const current = get().current
       if (current) void get().load(current)
+      for (const f of b.folders) if (f.path !== current) void get().loadPlan(f.path)
     } catch (e) {
       applyTheme('system')
       set({ ready: true, bootFailure: asFailure(e) })
@@ -187,6 +211,8 @@ export const useApp = create<State>((set, get) => ({
       })
       void get().loadPlan(path)
       void get().loadDupes(path)
+      void get().loadInsights(path)
+      if (get().similar[path]) void get().loadSimilar(path)
     } catch (e) {
       const f = asFailure(e)
       if (f.code === 'cancelled') return
@@ -222,6 +248,81 @@ export const useApp = create<State>((set, get) => ({
       const f = asFailure(e)
       if (f.code === 'cancelled') return
       set((s) => ({ dupes: { ...s.dupes, [path]: { ...(s.dupes[path] ?? { groups: [], kept: {}, done: 0, total: 0 }), status: 'error', failure: f } } }))
+    }
+  },
+
+  loadInsights: async (path) => {
+    try {
+      const data = await api.insights(path)
+      set((s) => ({ insights: { ...s.insights, [path]: data } }))
+    } catch {
+      set((s) => ({ insights: { ...s.insights, [path]: { extracted: [], installed: [] } } }))
+    }
+  },
+
+  loadSimilar: async (path) => {
+    const prev = get().similar[path]
+    set((s) => ({ similar: { ...s.similar, [path]: { status: 'running', groups: prev?.groups ?? [], done: 0, total: 0, kept: prev?.kept ?? {} } } }))
+    try {
+      const groups = await api.similar(path)
+      set((s) => {
+        const old = s.similar[path]
+        const kept: Record<string, string[]> = {}
+        for (const g of groups) {
+          const still = (old?.kept[g.id] ?? []).filter((p) => g.files.some((f) => f.path === p))
+          kept[g.id] = still.length ? still : [g.keep]
+        }
+        return { similar: { ...s.similar, [path]: { status: 'ready', groups, done: 1, total: 1, kept } } }
+      })
+    } catch (e) {
+      if (asFailure(e).code === 'cancelled') return
+      set((s) => ({ similar: { ...s.similar, [path]: { ...(s.similar[path] ?? { groups: [], kept: {}, done: 0, total: 0 }), status: 'error' } } }))
+    }
+  },
+
+  extract: async (entries) => {
+    const folder = get().current
+    const zips = entries.filter((e) => e.ext === 'zip')
+    if (!folder || !zips.length) return
+    await get().run({ folder, kind: 'extract', ops: zips.map((e) => ({ action: 'extract', source: e.path, destination: null, size: e.size, modified: e.modified })) })
+  },
+
+  rename: async (changes) => {
+    const folder = get().current
+    const ops = changes.filter((c) => c.name && c.name !== c.entry.name)
+    if (!folder || !ops.length) return null
+    const batch = await get().run({
+      folder,
+      kind: 'rename',
+      allowProjects: true,
+      ops: ops.map((c) => ({ action: 'move', source: c.entry.path, destination: join(parent(c.entry.path), c.name), size: c.entry.size, modified: c.entry.modified })),
+    })
+    const renamed = batch?.ops.filter((o) => o.status === 'done' && o.target).map((o) => o.target!) ?? []
+    if (renamed.length) set({ selection: renamed, anchor: renamed[0] })
+    return batch
+  },
+
+  setCleanup: async (path, on) => {
+    try {
+      await api.setCleanup(path, on)
+      set((s) => ({ folders: s.folders.map((f) => (f.path === path ? { ...f, cleanup: on, lastCleanup: on ? Date.now() : f.lastCleanup } : f)) }))
+    } catch (e) {
+      get().flash(failureText(asFailure(e)), 'error')
+    }
+  },
+
+  cleanupNow: async (path) => {
+    try {
+      const batch = await api.cleanupNow(path)
+      set((s) => ({
+        folders: s.folders.map((f) => (f.path === path ? { ...f, lastCleanup: Date.now() } : f)),
+        history: batch ? [batch, ...s.history.filter((b) => b.id !== batch.id)] : s.history,
+      }))
+      if (batch) get().flash(describeBatch(batch).done, 'neutral', undoable(batch) ? batch.id : undefined)
+      else get().flash(tr('Nothing to clean up right now.'))
+      void get().load(path, true)
+    } catch (e) {
+      get().flash(failureText(asFailure(e)), 'error')
     }
   },
 
@@ -312,6 +413,7 @@ export const useApp = create<State>((set, get) => ({
       const failed = batch.ops.filter((o) => o.status === 'undoFailed').length
       const undone = batch.ops.filter((o) => o.status === 'undone').length
       if (failed) get().flash(tr('Put back {0} of {1} files. Open History to see why the rest stayed.', undone, undone + failed), 'error')
+      else if (batch.kind === 'extract') get().flash(tr('Moved {0} extracted folder to the Trash.|Moved {0} extracted folders to the Trash.', undone))
       else get().flash(tr('Put back {0} file.|Put back {0} files.', undone))
       void get().load(batch.folder, true)
     } catch (e) {
@@ -404,18 +506,22 @@ export const useApp = create<State>((set, get) => ({
       set({ sheet: { type: 'project', entries, dir: target } })
       return
     }
-    await get().run({ folder, kind: 'move', allowProjects: confirmed, ops })
+    const batch = await get().run({ folder, kind: 'move', allowProjects: confirmed, ops })
+    const moved = entries.filter((e) => !e.dir && e.project == null)
+    if (batch && get().sheet?.type !== 'result' && moved.length && inside(target, folder) && batch.ops.every((o) => o.status === 'done')) {
+      get().flash(describeBatch(batch).done, 'neutral', batch.id, inferRule(moved, relative(target, folder).replace(/\\/g, '/')))
+    }
   },
 
-  flash: (text, tone = 'neutral', undo) => {
+  flash: (text, tone = 'neutral', undo, rule) => {
     if (toastTimer) clearTimeout(toastTimer)
-    const t = { id: ++toastId, text, tone, undo }
+    const t = { id: ++toastId, text, tone, undo, rule }
     set({ toast: t })
     toastTimer = setTimeout(
       () => {
         if (get().toast?.id === t.id) set({ toast: null })
       },
-      undo ? 7000 : 4200,
+      rule ? 10000 : undo ? 7000 : 4200,
     )
   },
 }))

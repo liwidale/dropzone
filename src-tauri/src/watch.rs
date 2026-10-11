@@ -1,3 +1,4 @@
+use crate::alerts;
 use crate::engine::{lock, ApplyRequest, Core, OpRequest};
 use crate::store::{BatchKind, OpAction};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -11,6 +12,8 @@ use tauri::{AppHandle, Emitter};
 
 const QUIET: Duration = Duration::from_millis(700);
 const SETTLE: Duration = Duration::from_millis(4_500);
+const CLEANUP_FIRST: Duration = Duration::from_secs(60);
+const CLEANUP_CHECK: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +39,7 @@ impl Watch {
                 let mut changed: HashMap<String, Instant> = HashMap::new();
                 let mut settling: HashMap<String, Instant> = HashMap::new();
                 let mut failed: HashSet<(String, i64)> = HashSet::new();
+                let mut next_cleanup = Instant::now() + CLEANUP_FIRST;
                 loop {
                     match rx.recv_timeout(Duration::from_millis(250)) {
                         Ok(path) => {
@@ -74,6 +78,23 @@ impl Watch {
                         }
                         settling.remove(&root);
                         auto_sort(&app, &core, &root, &mut failed);
+                    }
+                    if now >= next_cleanup && !core.busy() {
+                        next_cleanup = now + CLEANUP_CHECK;
+                        for root in core.due_cleanups() {
+                            if let Ok(Some(batch)) = core.cleanup(&root) {
+                                let _ = app.emit("history-changed", batch.id.clone());
+                                let _ = app.emit("folder-changed", Changed { folder: root });
+                                if alerts::done(&batch) > 0 {
+                                    alerts::send(
+                                        &app,
+                                        &core,
+                                        alerts::cleaned_title(&batch),
+                                        alerts::summary(&batch),
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             })
@@ -140,6 +161,14 @@ fn auto_sort(app: &AppHandle, core: &Core, root: &str, failed: &mut HashSet<(Str
     if let Ok(batch) = core.apply(req, &|_, _| {}) {
         for op in batch.ops.iter().filter(|o| o.failure.is_some()) {
             failed.insert((op.source.clone(), op.modified));
+        }
+        if alerts::done(&batch) > 0 {
+            alerts::send(
+                app,
+                core,
+                alerts::sorted_title(&batch),
+                alerts::summary(&batch),
+            );
         }
         let _ = app.emit("history-changed", batch.id);
         let _ = app.emit(

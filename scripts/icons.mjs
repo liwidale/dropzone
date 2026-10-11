@@ -106,6 +106,18 @@ writeFileSync(icons('32x32.png'), pngs[32])
 writeFileSync(icons('128x128.png'), pngs[128])
 writeFileSync(icons('128x128@2x.png'), pngs[256])
 
+function glyph(size, rgb) {
+  const m = 0.06
+  return render(size, (x, y) => {
+    const gx = (x - m) / (1 - 2 * m)
+    const gy = (y - m) / (1 - 2 * m)
+    return gx >= 0 && gx <= 1 && gy >= 0 && gy <= 1 && inGlyph(gx, gy) ? [...rgb, 1] : [0, 0, 0, 0]
+  })
+}
+writeFileSync(icons('tray.png'), png(36, glyph(36, [0, 0, 0])))
+mkdirSync(path.join(root, 'src', 'assets'), { recursive: true })
+writeFileSync(path.join(root, 'src', 'assets', 'drag.png'), png(64, appIcon(64, 0.04)))
+
 {
   const list = [16, 24, 32, 48, 64, 128, 256]
   const head = Buffer.alloc(6 + 16 * list.length)

@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { ApplyRequest, Batch, Boot, Dropped, DupGroup, Failure, Folder, JobProgress, KnownFolder, Plan, Rule, RulePreview, Settings, Snapshot } from './types'
+import type { ApplyRequest, Batch, Boot, Dropped, DupGroup, Failure, Folder, Insights, JobProgress, KnownFolder, Plan, Rule, RulePreview, Settings, SimilarGroup, Snapshot, TrayFolder } from './types'
 
 export function asFailure(e: unknown): Failure {
   if (e && typeof e === 'object' && 'code' in e) return e as Failure
@@ -29,6 +29,12 @@ export const api = {
   defaultRules: () => call<Rule[]>('default_rules'),
   setAuto: (path: string, on: boolean) => call<void>('set_auto', { path, on }),
   setAllowProject: (path: string, on: boolean) => call<void>('set_allow_project', { path, on }),
+  setCleanup: (path: string, on: boolean) => call<void>('set_cleanup', { path, on }),
+  cleanupNow: (path: string) => call<Batch | null>('cleanup_now', { path }),
+  insights: (path: string) => call<Insights>('insights', { path }),
+  similar: (path: string) => call<SimilarGroup[]>('similar', { path }),
+  readText: (path: string) => call<string>('read_text', { path }),
+  updateTray: (folders: TrayFolder[]) => call<void>('update_tray', { folders }),
   apply: (request: ApplyRequest) => call<Batch>('apply', { request }),
   undo: (id: string) => call<Batch>('undo', { id }),
   history: () => call<Batch[]>('history'),
@@ -47,6 +53,7 @@ export const on = {
   historyChanged: (cb: () => void): Promise<UnlistenFn> => listen('history-changed', () => cb()),
   settingsChanged: (cb: () => void): Promise<UnlistenFn> => listen('settings-changed', () => cb()),
   duplicatesProgress: (cb: (p: JobProgress) => void): Promise<UnlistenFn> => listen<JobProgress>('duplicates-progress', (e) => cb(e.payload)),
+  similarProgress: (cb: (p: JobProgress) => void): Promise<UnlistenFn> => listen<JobProgress>('similar-progress', (e) => cb(e.payload)),
   applyProgress: (cb: (p: JobProgress) => void): Promise<UnlistenFn> => listen<JobProgress>('apply-progress', (e) => cb(e.payload)),
   dropped: (cb: (d: Dropped) => void): Promise<UnlistenFn> => listen<Dropped>('folders-dropped', (e) => cb(e.payload)),
 }

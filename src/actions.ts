@@ -1,4 +1,6 @@
+import { startDrag } from '@crabnebula/tauri-plugin-drag'
 import { api, asFailure } from './api'
+import dragUrl from './assets/drag.png'
 import { failureText } from './copy'
 import { isAbsolute, join } from './format'
 import { tr } from './i18n'
@@ -56,12 +58,41 @@ export function moveMenu(entries: Entry[]): MenuSpec {
 
 export function entryMenu(entries: Entry[]): Promise<void> {
   const n = entries.length
+  const zips = entries.filter((e) => e.ext === 'zip')
   return popup([
     { text: n > 1 ? tr('Open {0} files', n) : tr('Open'), action: () => void openEntries(entries) },
+    { text: tr('Quick Look'), enabled: n === 1, action: () => useApp.setState({ preview: entries[0].path }) },
     { text: tr('Show in Finder'), action: () => void revealEntries(entries) },
     'separator',
+    { text: n > 1 ? tr('Rename {0} files…', n) : tr('Rename…'), action: () => st().set({ sheet: { type: 'rename', entries } }) },
+    ...(zips.length ? [{ text: zips.length > 1 ? tr('Extract {0} archives', zips.length) : tr('Extract'), action: () => void st().extract(zips) }] : []),
     moveMenu(entries),
     ...(st().settings.removal === 'trash' ? [{ text: tr('Move to Trash'), action: () => void st().trash(entries) }] : []),
     { text: tr('Delete Immediately…'), action: () => void st().deleteNow(entries) },
   ])
+}
+
+let dragIcon: Promise<string> | null = null
+
+function iconData(): Promise<string> {
+  dragIcon ??= fetch(dragUrl)
+    .then((r) => r.blob())
+    .then(
+      (b) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result))
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(b)
+        }),
+    )
+  return dragIcon
+}
+
+export async function dragOut(paths: string[]): Promise<void> {
+  try {
+    await startDrag({ item: paths, icon: await iconData(), mode: 'copy' })
+  } catch (err) {
+    st().flash(failureText(asFailure(err)), 'error')
+  }
 }

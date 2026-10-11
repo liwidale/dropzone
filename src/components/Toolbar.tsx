@@ -10,6 +10,8 @@ export const PRESET_LABEL: Record<Preset, string> = {
   'stale-installers': tr('Old installers'),
   unfinished: tr('Unfinished downloads'),
   large: tr('Large files'),
+  installed: tr('Installers for apps you have'),
+  extracted: tr('Archives already extracted'),
 }
 
 export function Toolbar() {
@@ -42,7 +44,9 @@ export function Toolbar() {
           ? tr('Duplicates')
           : view === 'rules'
             ? tr('Rules')
-            : tr('History')
+            : view === 'triage'
+              ? tr('One by one')
+              : tr('History')
 
   const subtitle =
     view === 'files'

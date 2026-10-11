@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { entryMenu, openEntries } from '../actions'
+import { dragOut, entryMenu, openEntries } from '../actions'
 import { bytes, when } from '../format'
 import { tr } from '../i18n'
 import { Icon } from '../icons'
@@ -130,8 +130,26 @@ export function FileList({ entries, location, rootName }: { entries: Entry[]; lo
     } else if (ev.shiftKey && (pivot.current ?? s.anchor)) {
       useApp.setState({ selection: range((pivot.current ?? s.anchor)!, index.current.get(e.path)!), anchor: e.path })
     } else {
-      useApp.setState({ selection: [e.path], anchor: e.path })
+      const keep = s.selection.length > 1 && s.selection.includes(e.path)
+      useApp.setState(keep ? { anchor: e.path } : { selection: [e.path], anchor: e.path })
       pivot.current = e.path
+      const paths = keep ? s.selection : [e.path]
+      const { clientX: x, clientY: y } = ev
+      const move = (m: globalThis.MouseEvent) => {
+        if (Math.hypot(m.clientX - x, m.clientY - y) < 6) return
+        stop()
+        void dragOut(paths)
+      }
+      const up = () => {
+        stop()
+        if (keep) useApp.setState({ selection: [e.path] })
+      }
+      const stop = () => {
+        window.removeEventListener('mousemove', move)
+        window.removeEventListener('mouseup', up)
+      }
+      window.addEventListener('mousemove', move)
+      window.addEventListener('mouseup', up)
     }
   }
 
@@ -171,6 +189,7 @@ export function FileList({ entries, location, rootName }: { entries: Entry[]; lo
     else if (ev.key === 'Enter' || (modKey(ev) && (ev.key === 'ArrowDown' || ev.key === 'o'))) void openEntries(chosen())
     else if ((isMac && ev.metaKey && ev.altKey && ev.key === 'Backspace') || (!isMac && ev.shiftKey && ev.key === 'Delete')) void s.deleteNow(chosen())
     else if ((modKey(ev) && ev.key === 'Backspace') || (!isMac && ev.key === 'Delete')) void s.trash(chosen())
+    else if (ev.key === ' ' && s.anchor) useApp.setState({ preview: s.preview ? null : s.anchor })
     else if (ev.key === 'Escape') useApp.setState({ selection: [], anchor: null })
     else return
     ev.preventDefault()

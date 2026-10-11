@@ -86,6 +86,12 @@ export function describeBatch(b: Batch): { title: string; done: string } {
       return { title: tr('Moved {0} file to the Trash|Moved {0} files to the Trash', n), done: tr('Moved {0} file to the Trash.|Moved {0} files to the Trash.', n) }
     case 'delete':
       return { title: tr('Deleted {0} file|Deleted {0} files', n), done: tr('Deleted {0} file.|Deleted {0} files.', n) }
+    case 'rename':
+      return { title: tr('Renamed {0} file|Renamed {0} files', n), done: tr('Renamed {0} file.|Renamed {0} files.', n) }
+    case 'extract':
+      return { title: tr('Extracted {0} archive|Extracted {0} archives', n), done: tr('Extracted {0} archive.|Extracted {0} archives.', n) }
+    case 'cleanup':
+      return { title: tr('Cleaned up {0} file|Cleaned up {0} files', n), done: tr('Cleaned up {0} file.|Cleaned up {0} files.', n) }
   }
 }
 

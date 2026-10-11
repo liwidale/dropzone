@@ -212,6 +212,32 @@ const P = {
     </>
   ),
   bolt: <path d="M9 2 3.8 9h3.6L7 14l5.2-7H8.6z" />,
+  edit: <path d="M10.4 3.2 12.8 5.6 6 12.4l-3 .6.6-3z" />,
+  eye: (
+    <>
+      <path d="M1.8 8S4 3.8 8 3.8 14.2 8 14.2 8 12 12.2 8 12.2 1.8 8 1.8 8z" />
+      <circle cx="8" cy="8" r="1.8" />
+    </>
+  ),
+  extract: (
+    <>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.6" />
+      <path d="M8 5v5.5M5.6 8.4 8 10.8l2.4-2.4" />
+    </>
+  ),
+  cards: (
+    <>
+      <rect x="3" y="4.5" width="10" height="9" rx="1.6" />
+      <path d="M4.8 2.5h6.4" />
+    </>
+  ),
+  broom: <path d="M10.5 2.5 7.2 7.8M5 8.3l4.3 2.6-1 3.1c-2.2-.3-4.3-1.6-5.3-3.4zM6.2 9l3.5 2.1" />,
+  similar: (
+    <>
+      <rect x="2" y="4" width="7.5" height="7.5" rx="1.4" />
+      <path d="M11 4.5h1.5c.8 0 1.5.7 1.5 1.5v6c0 .8-.7 1.5-1.5 1.5h-6c-.8 0-1.5-.7-1.5-1.5V13" />
+    </>
+  ),
 } satisfies Record<string, ReactElement>
 
 export type IconName = keyof typeof P

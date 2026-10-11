@@ -9,7 +9,17 @@ import { Icon, type IconName } from '../icons'
 import { folderOf, undoable, useApp } from '../store'
 import type { Batch, OpRecord } from '../types'
 
-const KIND_ICON: Record<Batch['kind'], IconName> = { sort: 'sort', auto: 'bolt', duplicates: 'copies', move: 'move', trash: 'trash', delete: 'trash' }
+const KIND_ICON: Record<Batch['kind'], IconName> = {
+  sort: 'sort',
+  auto: 'bolt',
+  duplicates: 'copies',
+  move: 'move',
+  trash: 'trash',
+  delete: 'trash',
+  rename: 'edit',
+  extract: 'extract',
+  cleanup: 'broom',
+}
 
 function status(b: Batch): string {
   const total = b.ops.length

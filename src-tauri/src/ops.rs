@@ -26,6 +26,12 @@ pub fn numbered(name: &str, n: u32) -> String {
     format!("{stem} {n}{ext}")
 }
 
+pub fn same_file(a: &Path, b: &Path) -> bool {
+    a != b
+        && exists(b)
+        && matches!((dunce::canonicalize(a), dunce::canonicalize(b)), (Ok(x), Ok(y)) if x == y)
+}
+
 pub fn exists(p: &Path) -> bool {
     fs::symlink_metadata(p).is_ok()
 }

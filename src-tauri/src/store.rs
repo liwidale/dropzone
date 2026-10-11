@@ -17,6 +17,8 @@ pub struct Settings {
     pub recursive: bool,
     pub stale_days: u32,
     pub removal: String,
+    pub menu_bar: bool,
+    pub notify: bool,
 }
 
 impl Default for Settings {
@@ -27,6 +29,8 @@ impl Default for Settings {
             recursive: true,
             stale_days: 30,
             removal: "trash".into(),
+            menu_bar: true,
+            notify: true,
         }
     }
 }
@@ -42,6 +46,10 @@ pub struct FolderConfig {
     pub auto_since: i64,
     #[serde(default)]
     pub allow_project: bool,
+    #[serde(default)]
+    pub cleanup: bool,
+    #[serde(default)]
+    pub last_cleanup: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -61,6 +69,9 @@ pub enum BatchKind {
     Move,
     Trash,
     Delete,
+    Rename,
+    Extract,
+    Cleanup,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,6 +80,7 @@ pub enum OpAction {
     Move,
     Trash,
     Delete,
+    Extract,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
