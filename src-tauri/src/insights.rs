@@ -118,6 +118,7 @@ fn same_app(token: &str, app: &str) -> bool {
         || (token.len() >= 4 && app.starts_with(token))
 }
 
+#[cfg(any(target_os = "macos", windows))]
 fn names_in(dir: &Path, suffix: &str, recursive: bool, out: &mut HashSet<String>) {
     let Ok(read) = fs::read_dir(dir) else { return };
     for item in read.flatten() {
