@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+
+- **Similar images.** The Duplicates view now also finds images that look almost the same, such as resized copies and series of screenshots.
+- **Installers you no longer need.** Dropzone notices installers for apps that are already installed.
+- **Archives you already extracted.** ZIP archives whose contents already sit next to them are suggested for removal, and any ZIP archive can be extracted with one click.
+- **One by one.** Go through loose files one at a time with a large preview, a suggested destination and single-key actions.
+- **Quick preview.** Press `Space` to look at images, videos, audio, PDFs, text and code inside Dropzone.
+- **Rename and batch rename.** Rename one file, or many with a pattern or find and replace, with a preview and Undo.
+- **Rules from your moves.** After moving files into a folder, Dropzone offers to turn it into a rule.
+- **Weekly cleanup.** Rules that move files to the Trash can run once a week on their own.
+- **Menu bar icon and notifications.** See how many files wait to be sorted, and get a notification when Dropzone sorts or cleans up on its own. Closing the window keeps Dropzone running there.
+- **Drag files out.** Drag files from Dropzone into other apps.
+- **Monthly summary.** The overview shows how many files Dropzone sorted and how much space it freed in the last 30 days.
+
 ## 1.2.0
 
 ### Added

@@ -62,7 +62,16 @@ Each release also lists `SHA256SUMS.txt` so you can check the download.
 - **Review before anything moves.** Sorting opens a preview grouped by destination. Leave out any file you like. When a name is already taken, the file gets a number, so nothing is ever replaced.
 - **Undo anything you move.** Every change is recorded in History. Undo puts files back where they were, including files moved to the Trash, and says plainly when something can no longer be restored.
 - **Delete right away when you want to.** Choose **Delete Immediately** for any file, or set Dropzone to skip the Trash for everything it removes. Dropzone always asks first, because deleted files can't be restored.
-- **Find exact duplicates.** Dropzone compares file contents, so copies with different names are found too. You choose which copy stays, and one always does.
+- **Find exact duplicates and similar images.** Dropzone compares file contents, so copies with different names are found too. It also spots images that look almost the same, like resized copies or a series of screenshots. You choose which copy stays, and one always does.
+- **Spot what you no longer need.** Dropzone notices installers for apps you already have and ZIP archives you have already extracted, and suggests removing them.
+- **Go through files one by one.** A focused view shows each loose file large, with a suggested destination. Keep, move or remove it with a single key.
+- **Look before you decide.** Press `Space` to preview images, videos, audio, PDFs, text and code without opening another app.
+- **Rename in place.** Rename one file, or many at once with a pattern like `{date} {name}` or find and replace, with a preview before anything changes.
+- **Rules from what you do.** Move a few files into a folder, and Dropzone offers to make a rule from it.
+- **Extract archives.** Extract a ZIP archive next to it with one click, and undo it if you change your mind.
+- **Clean up on a schedule.** Let rules that move files to the Trash run once a week on their own.
+- **Always at hand.** A menu bar icon shows how many files wait to be sorted, and a notification tells you when Dropzone sorted or cleaned up on its own.
+- **Drag files out.** Drag files from Dropzone straight into other apps.
 - **See what you have.** Files are recognized by their contents as well as their names, including screenshots, unfinished downloads and files without an extension. The site a file came from is shown when your browser or system recorded it.
 - **Code projects stay intact.** Folders with a `.git` folder, `package.json`, `Cargo.toml` or another project file are protected. Sorting and duplicate cleanup never touch them, and moving their files by hand asks first.
 - **Sort new files automatically.** Turn it on for a folder, and files that arrive from then on are sorted as soon as they stop changing. Rules that move files to the Trash only run when you sort by hand.
@@ -90,10 +99,13 @@ Each release also lists `SHA256SUMS.txt` so you can check the download.
 
 - **Overview** shows how much space each kind of file takes and suggests what to do next: files to sort, duplicates, installers you no longer need, unfinished downloads and very large files.
 - **All files** and the kinds in the sidebar list every file. Switch between everything and the top level only, sort by any column and select files to open, show in Finder, move or trash.
-- **Duplicates** groups identical files. Mark which copies stay and move the rest to the Trash after a final review.
+- **Duplicates** groups identical files, and **Similar images** groups images that look almost the same. Mark which copies stay and move the rest to the Trash after a final review.
+- **One by one** shows each loose file at the top level large. `Return` moves it where the rules suggest, `M` picks another folder, `D` removes it, `K` keeps it and `←` goes back.
 - **Rules** decide where files go. Turn them on and off, edit them or change their order.
 - **History** lists every change with an **Undo** button.
 - **Add more folders** with **Add folder** in the sidebar, or drop a folder onto the window.
+- **Right-click a file** to preview, rename, extract, move or remove it.
+- **Close the window** and Dropzone keeps running in the menu bar, so automatic sorting and cleanup keep working. Turn this off with **Show in menu bar** in **Settings**.
 
 ## Keyboard shortcuts
 
@@ -108,7 +120,7 @@ Each release also lists `SHA256SUMS.txt` so you can check the download.
 | Show or hide the inspector | `⌥⌘I` | `Ctrl+Alt+I` |
 | Settings | `⌘,` | `Ctrl+,` |
 
-In the file list: `↑` `↓` move the selection, `Shift` extends it, `Enter` opens the selected files and `Esc` clears the selection. `⌘⌫` on macOS and `Delete` on Windows and Linux move the selected files to the Trash. `⌥⌘⌫` on macOS and `Shift+Delete` on Windows and Linux delete them immediately.
+In the file list: `↑` `↓` move the selection, `Shift` extends it, `Enter` opens the selected files, `Space` previews the selected file and `Esc` clears the selection. In the preview, `↑` `↓` show the next or previous file. `⌘⌫` on macOS and `Delete` on Windows and Linux move the selected files to the Trash. `⌥⌘⌫` on macOS and `Shift+Delete` on Windows and Linux delete them immediately.
 
 ## Rules
 
@@ -133,6 +145,7 @@ Rules run from top to bottom, and the first rule that matches a file decides whe
 - It reads only the folders you add. Moves happen with the same rights you have in your file manager.
 - File contents are read only to recognize file types and to compare possible duplicates.
 - You can clear History at any time in **Settings**.
+- Checking for installed apps only reads the names of your apps, in `/Applications` on macOS, the Start menu on Windows and the app launchers on Linux.
 - **Removing files** in **Settings** decides whether removed files go to the Trash, where you can restore them, or are deleted right away.
 
 ## Where Dropzone keeps its files
@@ -218,7 +231,7 @@ React interface ──IPC──▶ Rust core ──▶ your folders
 3. Sorting first builds a plan. Before each move, Dropzone checks that the file hasn't changed since you reviewed it and that it lives inside a folder you added. Moves never overwrite anything: on the same drive they use an exclusive rename (`renamex_np` on macOS, `MoveFileExW` on Windows, `renameat2` on Linux), across drives a copy is checked before the original is removed.
 4. Files go to the system Trash or Recycle Bin, and Dropzone remembers exactly where each one landed so Undo can bring it back.
 5. Each change is written to a journal before it happens. If Dropzone stops halfway, the next launch works out what was done from the journal and the files on disk.
-6. Duplicates are found by size first, then by a fast fingerprint of the start and end of each file, and finally by a full BLAKE3 hash.
+6. Duplicates are found by size first, then by a fast fingerprint of the start and end of each file, and finally by a full BLAKE3 hash. Similar images are compared by a small picture of their brightness and colors, so they match even after resizing.
 7. The interface has no direct access to your files. It can only ask the Rust core, which checks every path it receives.
 
 ## Project structure
@@ -235,6 +248,10 @@ src-tauri/          Rust core
   src/engine.rs     plans, applying changes, undo and recovery
   src/ops.rs        safe moves, copies and the Trash on each system
   src/dupes.rs      duplicate detection
+  src/similar.rs    similar images
+  src/insights.rs   extracted archives, installed apps and ZIP extraction
+  src/tray.rs       menu bar icon
+  src/alerts.rs     notifications
   src/watch.rs      folder watching and automatic sorting
 branding/           app icon
 scripts/            icon generator
